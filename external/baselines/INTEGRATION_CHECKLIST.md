@@ -7,7 +7,7 @@ This checklist is the execution-facing companion to `external/baselines/STATUS.m
 - [ ] Use the current project dataset splits for `GWHD_2021`, `MTC`, and `URC`
 - [ ] Keep metrics fixed to `MAE`, `MSE`, and `MAPE`
 - [ ] Keep inference fixed to single-scale evaluation unless the paper comparison explicitly states otherwise
-- [ ] Measure complexity with `python code\tools\measure_model_complexity.py --config <config> --input-shape 1 3 1080 1920`
+- [ ] Measure complexity with `python pack\tools\measure_model_complexity.py --config <config> --input-shape 1 3 1080 1920`
 - [ ] Mark each result as one of:
   - local reproduction
   - adapted reproduction
@@ -28,7 +28,7 @@ All paper PDFs currently available locally:
 ### CSRNet
 
 - [ ] Read `ExperimentReference\CSRNet.pdf`
-- [ ] Implement locally in `code/models/csrnet.py`
+- [ ] Implement locally in `pack/models/csrnet.py`
 - [ ] Add configs for `GWHD`, `MTC`, `URC`
 - [ ] Verify training loop compatibility
 - [ ] Measure local Params/FLOPs
@@ -38,11 +38,18 @@ All paper PDFs currently available locally:
 
 - [ ] Read `ExperimentReference\NeurIPS-2020-distribution-matching-for-crowd-counting-Paper.pdf`
 - [ ] Search for official repository and record commit/URL
-- [ ] Clone into `external/baselines/dm_count/` if repository quality is acceptable
+- [ ] Vendor upstream snapshot into `external/baselines/dm_count/upstream/`
+- [ ] Record pin metadata in `external/baselines/dm_count/LOCAL_README.md`
 - [ ] Adapt dataset loading to current project splits
 - [ ] Export metrics under local protocol
 - [ ] Measure local Params/FLOPs if the model can be instantiated cleanly
 - [ ] Mark final result as `adapted reproduction` unless reproduced with zero structural changes
+
+Current pinned upstream for intake:
+
+- URL: `https://github.com/cvlab-stonybrook/DM-Count`
+- Branch: `master`
+- Commit: `cc5f2132e0d1328909f31b6d665b8e0b15c30467`
 
 ### CAN
 
