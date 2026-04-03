@@ -55,10 +55,19 @@ Current pinned upstream for intake:
 
 - [ ] Read `ExperimentReference\Liu_Context-Aware_Crowd_Counting_CVPR_2019_paper.pdf`
 - [ ] Search for official or trusted implementation
-- [ ] Decide between external clone and local structural implementation
+- [ ] Vendor upstream snapshot into `external/baselines/can/upstream/`
+- [ ] Record pin metadata in `external/baselines/can/LOCAL_README.md`
+- [ ] Capture first-pass audit for train/test/data/model entry points
+- [ ] Write local adaptation notes and planning docs if audit remains readable
 - [ ] Align output contract with current counting pipeline
 - [ ] Measure local Params/FLOPs
 - [ ] Mark final result as `adapted reproduction`
+
+Current pinned upstream for intake:
+
+- URL: `https://github.com/weizheliu/Context-Aware-Crowd-Counting`
+- Branch: `master`
+- Commit: `d2e4d0425f578e556c1ab6017d326cff20466fad`
 
 ### SASNet
 

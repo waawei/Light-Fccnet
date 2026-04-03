@@ -4,13 +4,21 @@ Date: 2026-04-04
 
 ## Current Goal
 
-切换到下一条横向基线：`CAN`。
+推进 `CAN` 到本地适配规划阶段。
 
-执行路线已经确定：
+当前已经完成：
 
-- 先找官方或高可信外部仓库
-- 先做 intake / pinning / audit
-- 再决定本地适配方案
+- 官方仓库 intake
+- upstream pinning
+- first-pass audit
+- local adaptation notes
+- data adaptation plan
+- result export plan
+
+下一步是：
+
+- 决定是否进入 `CAN` adapter 实现
+- 若进入，实现 dataset / eval / complexity wrappers
 
 ## Repository Root
 
@@ -80,6 +88,10 @@ Date: 2026-04-04
 5. `external/baselines/dm_count/LOCAL_ADAPTATION_NOTES.md`
 6. `external/baselines/dm_count/DATA_ADAPTATION_PLAN.md`
 7. `external/baselines/dm_count/RESULT_EXPORT_PLAN.md`
+8. `external/baselines/can/LOCAL_README.md`
+9. `external/baselines/can/LOCAL_ADAPTATION_NOTES.md`
+10. `external/baselines/can/DATA_ADAPTATION_PLAN.md`
+11. `external/baselines/can/RESULT_EXPORT_PLAN.md`
 
 ## Explicit Non-Goals
 
@@ -91,12 +103,35 @@ Date: 2026-04-04
 - 不把 `DM-Count` 的本地 smoke result 写进论文主表
 - 不跳过 `CAN` 的 intake 直接做本地实现
 
+## CAN Verified Intake State
+
+- upstream URL: `https://github.com/weizheliu/Context-Aware-Crowd-Counting`
+- upstream branch: `master`
+- pinned commit: `d2e4d0425f578e556c1ab6017d326cff20466fad`
+- vendored snapshot path: `external/baselines/can/upstream/`
+- upstream `.git` 已移除
+
+第一轮 audit 结论：
+
+- 结构可读，入口清晰，值得继续
+- 训练入口：`train.py`
+- 测试入口：`test.py`
+- 数据集入口：`dataset.py` + `image.py`
+- 模型定义：`model.py`
+- 主要风险：
+  - `Python 2.7`
+  - `PyTorch 0.4.1`
+  - `xrange`
+  - 旧式 `Variable`
+  - `/` 整除语义依赖
+  - `test.py` 内部硬编码路径
+
 ## Next Step
 
-下一目标是 `CAN`，先做：
+下一步应直接开始 `CAN` 的 adapter 设计落地，优先顺序：
 
-1. 查找官方或高可信外部仓库
-2. 记录 upstream URL / default branch / candidate pin
-3. 审查训练入口、评估入口、数据格式和依赖风险
-4. 写 `CAN` 的 spec / plan
-5. 经确认后再进入 vendor / pinning
+1. `external/baselines/can/local_adapters/datasets.py`
+2. `external/baselines/can/local_adapters/eval.py`
+3. `external/baselines/can/local_adapters/export_results.py`
+4. `external/baselines/can/local_adapters/measure_complexity.py`
+5. 最后再决定是否加 `run_local.py`
