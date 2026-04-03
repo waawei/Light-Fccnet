@@ -12,32 +12,17 @@ YAML_AVAILABLE = find_spec("yaml") is not None
 
 @contextmanager
 def _pack_train_module():
-    pack_aliases = {
-        "pack": "code",
-        "pack.models": "code.models",
-        "pack.data": "code.data",
-        "pack.data.transforms": "code.data.transforms",
-        "pack.utils": "code.utils",
-    }
-    saved_modules = {name: sys.modules.get(name) for name in pack_aliases}
-
     try:
-        for alias, target in pack_aliases.items():
-            sys.modules[alias] = importlib.import_module(target)
-        train_module = importlib.reload(importlib.import_module("code.train"))
+        train_module = importlib.reload(importlib.import_module("pack.train"))
         yield train_module
     finally:
-        for name, module in saved_modules.items():
-            if module is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = module
+        sys.modules.pop("pack.train", None)
 
 
 @unittest.skipUnless(TORCH_AVAILABLE, "torch is required for CSRNet baseline tests")
 class CSRNetRegistryTests(unittest.TestCase):
     def test_build_model_supports_csrnet(self):
-        from code.models import build_model
+        from pack.models import build_model
 
         cfg = {
             "model": {
@@ -59,7 +44,7 @@ class CSRNetForwardContractTests(unittest.TestCase):
     def test_forward_returns_training_compatible_triplet(self):
         import torch
 
-        from code.models import build_model
+        from pack.models import build_model
 
         cfg = {
             "model": {
@@ -82,7 +67,7 @@ class CSRNetForwardContractTests(unittest.TestCase):
     def test_predict_count_returns_batch_vector(self):
         import torch
 
-        from code.models import build_model
+        from pack.models import build_model
 
         model = build_model({"model": {"name": "csrnet", "input_size": [128, 128]}})
         x = torch.randn(2, 3, 128, 128)
@@ -97,12 +82,12 @@ class CSRNetConfigTests(unittest.TestCase):
     def test_dataset_specific_configs_build_csrnet(self):
         import yaml
 
-        from code.models import build_model
+        from pack.models import build_model
 
         config_paths = [
-            Path("code/config/gwhd/config_gwhd_csrnet.yaml"),
-            Path("code/config/mtc/config_mtc_csrnet.yaml"),
-            Path("code/config/urc/config_urc_csrnet.yaml"),
+            Path("pack/config/gwhd/config_gwhd_csrnet.yaml"),
+            Path("pack/config/mtc/config_mtc_csrnet.yaml"),
+            Path("pack/config/urc/config_urc_csrnet.yaml"),
         ]
 
         for config_path in config_paths:

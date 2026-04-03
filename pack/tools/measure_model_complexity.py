@@ -3,11 +3,19 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Dict, Iterable, Tuple
 
+import torch
+import torch.nn as nn
+
 
 TensorShape = Tuple[int, int, int, int]
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 
 def parse_input_shape(values: Iterable[str]) -> TensorShape:
@@ -154,7 +162,7 @@ def measure_model(model: nn.Module, input_shape: TensorShape) -> Dict[str, int |
 
 
 def measure_from_config(path: Path | str, input_shape: TensorShape | None = None) -> Dict[str, int | str | TensorShape]:
-    from code.models import build_model
+    from pack.models import build_model
 
     config = load_config(path)
     model = build_model(config)

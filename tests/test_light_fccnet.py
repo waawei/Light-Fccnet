@@ -11,14 +11,14 @@ import torch
 import yaml
 from PIL import Image
 
-from code.data import GWHDDataset
-from code.data.point_supervision import apply_transform_with_points
-from code.models import build_model
-from code.models.light_fccnet import LightFCCNet
-from code.utils import LightFCCLoss
-from code.utils.metrics import cal_mape
-from code.utils.light_ldms import compute_ldms_scales, compute_match_thresholds
-from code.models.modules import (
+from pack.data import GWHDDataset
+from pack.data.point_supervision import apply_transform_with_points
+from pack.models import build_model
+from pack.models.light_fccnet import LightFCCNet
+from pack.utils import LightFCCLoss
+from pack.utils.metrics import cal_mape
+from pack.utils.light_ldms import compute_ldms_scales, compute_match_thresholds
+from pack.models.modules import (
     LightChannelAttention,
     LightDensityHead,
     LightPyramidFeatureAggregation,
@@ -29,26 +29,11 @@ from code.models.modules import (
 
 @contextmanager
 def _pack_train_module():
-    pack_aliases = {
-        "pack": "code",
-        "pack.models": "code.models",
-        "pack.data": "code.data",
-        "pack.data.transforms": "code.data.transforms",
-        "pack.utils": "code.utils",
-    }
-    saved_modules = {name: sys.modules.get(name) for name in pack_aliases}
-
     try:
-        for alias, target in pack_aliases.items():
-            sys.modules[alias] = importlib.import_module(target)
-        train_module = importlib.reload(importlib.import_module("code.train"))
+        train_module = importlib.reload(importlib.import_module("pack.train"))
         yield train_module
     finally:
-        for name, module in saved_modules.items():
-            if module is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = module
+        sys.modules.pop("pack.train", None)
 
 
 class LightFCCNetBuildTests(unittest.TestCase):
@@ -226,7 +211,7 @@ class LightFCCNetBuildTests(unittest.TestCase):
 
 class LightFCCLossTests(unittest.TestCase):
     def test_baseline_counting_loss_returns_density_and_count_terms_without_ssim(self):
-        losses_module = importlib.import_module("code.utils.losses")
+        losses_module = importlib.import_module("pack.utils.losses")
         criterion = losses_module.BaselineCountingLoss()
         pred = torch.ones(2, 1, 8, 8)
         gt = torch.zeros(2, 1, 8, 8)
@@ -241,7 +226,7 @@ class LightFCCLossTests(unittest.TestCase):
         self.assertEqual(total.ndim, 0)
 
     def test_baseline_counting_loss_scales_explicit_gt_count(self):
-        losses_module = importlib.import_module("code.utils.losses")
+        losses_module = importlib.import_module("pack.utils.losses")
         criterion = losses_module.BaselineCountingLoss(density_scale=2.0)
         pred = torch.zeros(1, 1, 4, 4)
         gt = torch.zeros(1, 1, 4, 4)
@@ -768,7 +753,7 @@ class LightResultToolTests(unittest.TestCase):
         }
 
     def test_extract_best_results_includes_best_metrics(self):
-        import code.tools.extract_best_results as extract_best_results
+        import pack.tools.extract_best_results as extract_best_results
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             run_dir = Path(tmp_dir) / "gwhd_light_full"
@@ -795,7 +780,7 @@ class LightResultToolTests(unittest.TestCase):
             self.assertEqual(row["best_mape"], 8.8)
 
     def test_extract_best_results_reads_use_p3_loss_from_training_semantics(self):
-        import code.tools.extract_best_results as extract_best_results
+        import pack.tools.extract_best_results as extract_best_results
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             run_dir = Path(tmp_dir) / "gwhd_light_full"
@@ -827,7 +812,7 @@ class LightResultToolTests(unittest.TestCase):
             self.assertEqual((row["use_p1"], row["use_p2"], row["use_p3"]), (1, 1, 1))
 
     def test_extract_best_results_falls_back_to_legacy_model_use_p3(self):
-        import code.tools.extract_best_results as extract_best_results
+        import pack.tools.extract_best_results as extract_best_results
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             run_dir = Path(tmp_dir) / "legacy_light_full"
@@ -859,7 +844,7 @@ class LightResultToolTests(unittest.TestCase):
 
     def test_canonical_light_training_configs_parse(self):
         config_paths = [
-            Path("code/config") / dataset_name / filename
+            Path("pack/config") / dataset_name / filename
             for dataset_name, files in self._canonical_config_expectations().items()
             for filename in files
         ]
@@ -885,7 +870,7 @@ class LightResultToolTests(unittest.TestCase):
 
     def test_canonical_configs_follow_paper_ablation_ladder(self):
         for dataset_name, files in self._canonical_config_expectations().items():
-            config_dir = Path("code/config") / dataset_name
+            config_dir = Path("pack/config") / dataset_name
             for filename, expected in files.items():
                 with self.subTest(config=filename):
                     with (config_dir / filename).open("r", encoding="utf-8") as f:
