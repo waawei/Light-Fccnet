@@ -1,0 +1,73 @@
+model:
+  name: light_fccnet
+  in_channels: 3
+  input_size:
+  - 256
+  - 256
+  stage_channels:
+  - 32
+  - 64
+  - 96
+  - 128
+  fusion_channels: 96
+  spatial_max_tokens: 1024
+  head_init_bias: -7.2
+  use_p1: false
+  use_p2: false
+  use_p3: true
+data:
+  sigma: 8
+  gwhd_train_csv: ''
+  gwhd_val_csv: ''
+  gwhd_images_dir: ''
+  urc_root: ''
+  mtc_root: /root/autodl-tmp/datasets/Maize Tassel Counting Dataset
+  mtc_train_split_file: /root/autodl-tmp/datasets/Maize Tassel Counting Dataset/train.txt
+  mtc_val_split_file: /root/autodl-tmp/datasets/Maize Tassel Counting Dataset/val.txt
+  use_coarse_dropout: true
+  coarse_dropout_p: 0.3
+  coarse_dropout_min_holes: 1
+  coarse_dropout_max_holes: 3
+  coarse_dropout_min_height: 12
+  coarse_dropout_max_height: 32
+  coarse_dropout_min_width: 12
+  coarse_dropout_max_width: 32
+  coarse_dropout_fill_value: 0
+training:
+  batch_size: 16
+  num_epochs: 100
+  learning_rate: 5.0e-05
+  loss_type: light_fcc
+  alpha: 0.1
+  ldms_k: 3
+  ldms_factor: 1.0
+  ldms_max_ratio: 0.05
+  match_box_width: 4.0
+  match_box_height: 8.0
+  ssim_window: 11
+  ssim_c: 0.0001
+  num_workers: 4
+  optimizer:
+    type: Adam
+    weight_decay: 0.0001
+    betas:
+    - 0.9
+    - 0.999
+    eps: 1.0e-08
+  scheduler:
+    type: StepLR
+    step_size: 30
+    gamma: 0.5
+eval:
+  val_freq: 1
+  save_freq: 200
+  metrics:
+  - MAE
+  - MSE
+  - MAPE
+paths:
+  checkpoint_dir: /root/checkpoints/mtc_light_baseline_p3
+  log_dir: /root/tf-logs/mtc_light_baseline_p3
+seed: 42
+use_amp: false
+pin_memory: true

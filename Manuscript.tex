@@ -1,0 +1,467 @@
+\documentclass[a4paper,fleqn]{cas-sc}
+
+\usepackage{float}
+\usepackage[section]{placeins}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{tabularx}
+
+\setcounter{topnumber}{3}
+\setcounter{bottomnumber}{2}
+\setcounter{totalnumber}{5}
+
+\renewcommand{\topfraction}{0.90}
+\renewcommand{\bottomfraction}{0.80}
+\renewcommand{\textfraction}{0.08}
+\renewcommand{\floatpagefraction}{0.85}
+
+\setlength{\textfloatsep}{10pt plus 2pt minus 2pt}
+\setlength{\floatsep}{8pt plus 2pt minus 2pt}
+\setlength{\intextsep}{8pt plus 2pt minus 2pt}
+\makeatletter
+\setlength{\@fptop}{0pt}
+\setlength{\@fpsep}{8pt plus 1fil}
+\setlength{\@fpbot}{0pt plus 1fil}
+\makeatother
+
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{longtable}
+
+\usepackage[numbers]{natbib}
+\usepackage{hyperref}
+\hypersetup{hidelinks}
+\usepackage{lineno}
+
+\newcommand{\sep}{\quad}
+
+\begin{document}
+	\let\WriteBookmarks\relax
+	\def\floatpagepagefraction{1}
+	\def\textpagefraction{.001}
+	
+	\shorttitle{MPAD-Net for Field Crop Counting}
+	\shortauthors{Y. Liu et al.}
+	
+	\title[mode = title]{MPAD-Net: A Multi-Scale Plug-and-Play Attention Decoding Network for Field Crop Counting}
+	
+	\author{Yuxiang Liu}
+	\author{Rongyue Wei}
+	\author{Fuquan Zhang}
+	
+	\begin{abstract}
+		Accurate counting of wheat heads, maize tassels, and rice panicles is important for high-throughput phenotyping and precision agriculture. However, although existing density-map-regression-based counting methods can perform well on specific datasets, their enhancement modules are often tightly coupled to particular backbones, which limits reuse and transfer across different counting networks. In addition, scale variation and complex backgrounds can disrupt local density-peak formation and induce spurious density responses in non-target regions, and these responses accumulate during density-map integration. To address these issues, we propose MPAD-Net, a modular plug-and-play enhancement framework for field crop counting. MPAD-Net consists of three modules: a multi-scale feature fusion module (MSFF), a multi-scale attention module (MSAM), and a dual-path decoder (DPD). All three modules adopt standardized input-output interfaces and can be inserted into existing counting networks without changing the topology of compatible backbones or the core training pipeline, thereby jointly improving multi-scale representation, background suppression, and density regression. We evaluate MPAD-Net on three public datasets and one self-built UAV maize validation dataset, namely GWHD, MTC, URC, and Maize UAV. The Full configuration achieves the best MAE on all four datasets, reducing MAE by 23.4\%, 53.6\%, 53.2\%, and 63.6\%, respectively, relative to the baseline. Moreover, when the proposed modules are integrated into a re-implemented MPCount backbone under a unified local training and evaluation pipeline, the Full configuration again performs best and yields up to an 18.0\% reduction in MAE, indicating stable gains beyond the native architecture. Overall, MPAD-Net serves as a reusable modular enhancement framework that consistently improves density-peak quality, suppresses spurious density accumulation, and shows cross-scene effectiveness and cross-architecture transfer potential.
+	\end{abstract}
+	
+	\begin{keywords}
+		field crop counting \sep density-map regression \sep multi-scale feature fusion \sep attention mechanisms \sep deep learning \sep plug-and-play modules
+	\end{keywords}
+	
+	\maketitle
+	
+	\section{Introduction}
+	\linenumbers
+	
+	Field crops such as wheat, maize, and rice are among the world's most important staple crops and underpin food security for billions of people \cite{ref1,ref2}. According to the Food and Agriculture Organization of the United Nations, these three crops contribute more than 50\% of global caloric intake and exceed 2.8 billion tons in annual production \cite{ref3}. The numbers of crop organs, such as wheat heads, maize tassels, and rice panicles, are therefore important phenotypic traits because they reflect crop growth status and yield potential \cite{ref4,ref5}. These traits also support studies of crop development, environmental adaptation, and breeding selection \cite{ref6,ref7}. As food demand continues to rise and climate uncertainty intensifies, efficient, accurate, and scalable crop counting in complex field environments has become an increasingly important problem in smart agriculture and agricultural sustainability \cite{ref8,ref9}.
+	
+	Deep learning is now widely used in agricultural vision tasks, including crop monitoring, disease identification, yield prediction, and phenotypic analysis \cite{ref8,ref14}. At the same time, UAV platforms and high-resolution imaging have substantially improved data collection efficiency and made large-scale field analysis more feasible \cite{ref19,ref50}. In crop counting, several public datasets and representative methods have laid the foundation for automatic counting of different crop organs. For wheat-head counting, GWHD has become a widely used public benchmark \cite{ref2,ref51}. On this basis, WheatNet \cite{ref52} proposed a lightweight convolutional network for high-throughput counting, and Su et al. \cite{ref53} further improved wheat-head counting with more modern deep architectures. For maize tassel counting, TasselNetV2+ \cite{ref43} achieved efficient plant counting on high-resolution UAV imagery. Broader deep models and transfer settings have also begun to appear in agricultural vision. For example, CropFormer \cite{ref54} explored cross-scene crop classification, Ayalew et al. \cite{ref55} studied unsupervised domain adaptation across datasets, and rice-panicle counting has continued to attract attention \cite{ref5,ref56}. Together, these studies suggest that agricultural counting has evolved from single-scene recognition toward a more complex problem of cross-scene visual modeling.
+	
+	Despite this progress, density-map-regression-based methods still face several challenges in real field scenes. Scale variation is common: differences in growth stage, imaging height, and viewpoint can cause large changes in crop-organ size, whereas single-scale features are often insufficient to represent such variation adequately \cite{ref20,ref23}. Under density-map regression, scale mismatch may appear as weak local density peaks, overly broad peaks, or mixed responses between neighboring targets, thereby undermining the stability of subsequent integral-based counting. Background interference also degrades accuracy. Soil, leaves, shadows, and other vegetation introduce substantial noise and can distort density estimation \cite{ref4,ref5}. More specifically, non-target textures may induce weak and spatially dispersed spurious density responses in background regions, and these responses can accumulate into substantial errors after full-image integration. A further challenge is limited module generalization. Many enhancement or attention modules are designed for specific backbones or structures and lack standardized interfaces, making them difficult to integrate flexibly into other architectures in a truly plug-and-play manner \cite{ref29,ref27}.
+	
+	From the perspective of density-map-based object counting, this paradigm has become a mainstream route in visual counting because it can handle dense targets while preserving spatial localization information \cite{ref34,ref35}. An early representative model, MCNN \cite{ref20}, addressed scale variation through parallel branches with different convolution kernel sizes. Building on this idea, CSRNet \cite{ref21} introduced dilated convolutions to enlarge the receptive field while preserving feature resolution, thereby improving counting performance in dense scenes. Subsequent studies further improved counting accuracy from the perspectives of supervision and loss modeling. DM-Count \cite{ref24} uses optimal transport to match predicted density maps with ground-truth density distributions at the global level. P2PNet \cite{ref36} proposed a point-level prediction framework that avoids dependence on kernel parameters in density-map generation. AutoScale \cite{ref37} introduced a learnable scale estimation mechanism for targets of arbitrary size, and Ma et al. \cite{ref38} proposed unbalanced optimal transport to improve robustness to annotation noise. Although these methods have made clear progress on general counting tasks, most still depend on specific network structures or training strategies. In density-map-regression settings in particular, existing improvements tend to emphasize supervision design or end-to-end architectural optimization, while only rarely abstracting local density-peak formation and spurious-density integration error control as transferable modular problems.
+	
+	Multi-scale feature representation is central to visual counting because scale variation is one of its core challenges. Targets from the same category may vary greatly in size across images and even within a single image \cite{ref37}. FPN \cite{ref26} demonstrated the value of multi-scale representation in object detection through a top-down feature pyramid. AutoScale \cite{ref37} further introduced learnable scale prediction, whereas ConvNeXt \cite{ref42} improved multi-scale feature modeling through modern convolutional design. Multi-scale learning has also been widely adopted in counting. MCNN \cite{ref20} explicitly modeled different scales through a multi-column architecture. TasselNetV2+ \cite{ref43} proposed an efficient multi-scale network for high-resolution plant counting. P2PNet \cite{ref36} emphasized scale-invariant point-level prediction, and Swin Transformer \cite{ref44} achieved efficient multi-scale representation through a hierarchical architecture with shifted-window attention. However, most existing multi-scale methods remain tied to particular network designs. They usually embed scale modeling inside the overall architecture rather than formulating it as an independent module that can stabilize local density peaks and be reused across different counting backbones.
+	
+	Attention mechanisms are also widely used in counting because they guide networks toward important regions while suppressing irrelevant background interference \cite{ref45,ref46}. SE \cite{ref29} introduced channel attention, whereas CBAM \cite{ref27} further combined channel and spatial attention for more comprehensive feature recalibration. With the rise of Transformers, attention has been applied even more broadly in vision. ViT \cite{ref47} demonstrated the feasibility of pure Transformer architectures for classification. Swin Transformer \cite{ref44} improved multi-scale modeling efficiency through a hierarchical structure and window-based self-attention. ConvNeXt \cite{ref42} and CoAtNet \cite{ref48} further explored hybrid convolution-attention designs. In counting tasks, attention is often used to mitigate complex background interference and improve localization accuracy \cite{ref23,ref49}. Nevertheless, most existing attention modules model feature responses at only a single scale and usually function as internal components of specific architectures. They do not explicitly model multi-scale context, nor are they commonly designed to directly address spurious density responses and integration error control under point-supervised density regression. This limits their flexibility as plug-and-play modules across different counting frameworks.
+	
+	Overall, existing agricultural crop-counting studies have achieved promising performance on specific datasets or crop types, but most improvements are still organized around single tasks and single backbones. A unified modular paradigm that can simultaneously address scale mismatch, spurious density accumulation, and background confusion is still lacking. Developing an enhancement method with strong plug-and-play capability and transferability across crop types and counting frameworks therefore remains an important problem in agricultural counting.
+	
+	To address this gap, we propose MPAD-Net (Multi-scale Plug-and-play Attention Decoding Network), a modular plug-and-play enhancement framework for field crop counting. Rather than stacking additional structures around a single dataset, MPAD-Net organizes multi-scale representation enhancement, background suppression, and decoding refinement into a set of transferable plug-in modules with standardized interfaces. Specifically, MSFF is designed to alleviate density-response imbalance caused by scale variation, MSAM is designed to suppress spurious density responses induced by background textures, and DPD is designed to constrain density distributions through dual-path decoding and spatial gating. All three modules preserve feature resolution, backbone topology, and the training paradigm, allowing them to be integrated into compatible counting backbones in a plug-and-play manner.
+	
+	To evaluate the effectiveness and transferability of the proposed framework, we conduct experiments on three public field crop-counting datasets and one self-built UAV maize validation dataset, namely GWHD (Global Wheat Head Detection) \cite{ref2}, MTC (Maize Tassels Counting) \cite{ref4}, URC (Unmanned Rice Counting) \cite{ref5}, and Maize UAV. The results show that the Full configuration achieves the best MAE across all four heterogeneous scenarios. Results on the self-built UAV dataset further indicate that this trend is not limited to standard public benchmarks. Moreover, when the proposed modules are integrated into a re-implemented MPCount backbone under a unified local training and evaluation pipeline, they still deliver consistent gains, providing additional evidence of their effectiveness beyond the native MPAD-Net architecture.
+	
+	The main contributions of this work are summarized as follows:
+	\begin{enumerate}
+		\item We propose MPAD-Net, a modular plug-and-play enhancement framework for field crop counting, and define its reusability through standardized input-output interfaces under the constraints of resolution preservation, topology preservation, and an unchanged training paradigm.
+		\item From the perspective of density-map counting mechanisms, we design three functional modules, namely MSFF, MSAM, and DPD, to address scale-response imbalance, background-induced spurious density, and decoder-side error diffusion during integration, respectively, thereby jointly improving local density-peak quality and global counting stability.
+		\item We validate the proposed method on four heterogeneous agricultural counting scenarios, namely GWHD, MTC, URC, and Maize UAV, and further conduct cross-backbone transfer experiments on a re-implemented MPCount backbone. The results show that the Full configuration achieves the best MAE on all four datasets and delivers up to an 18.0\% reduction in MAE in transfer experiments, supporting the cross-scene effectiveness and cross-architecture transfer potential of the framework.
+	\end{enumerate}
+	
+	\section{Materials and Methods}
+	
+	\subsection{Datasets}
+	
+	We evaluated MPAD-Net on three public field crop-counting datasets and one self-collected UAV maize validation dataset. Representative examples from the four datasets, namely GWHD, MTC, URC, and Maize UAV, are shown in Fig.~\ref{fig:datasets}.
+	
+	\begin{figure}[pos=!htbp]
+		\centering
+		\includegraphics[width=0.65\linewidth,height=0.35\textheight,keepaspectratio]{figures/Fig1.png}
+		\caption{Examples from the four crop-counting datasets used in this study, including the three public datasets GWHD, MTC, and URC and the self-built Maize UAV dataset. Red dots indicate point annotations of target objects.}
+		\label{fig:datasets}
+	\end{figure}
+	
+	GWHD\_2021 (Global Wheat Head Detection) \cite{ref2} is a large-scale wheat-head detection dataset covering multiple countries and different growth stages. It contains 3,657 training images and 1,484 test images. The images vary substantially in illumination, wheat variety, and head density, and the number of heads per image ranges from 0 to more than 100.
+	
+	MTC (Maize Tassels Counting) \cite{ref4} is a maize tassel counting dataset containing 361 training images collected by UAVs at different heights and viewpoints. The dataset includes high-density scenes and complex canopy backgrounds, making tassels difficult to distinguish from surrounding vegetation. The number of tassels per image is roughly between 10 and 200, and some scenes exceed 200.
+	
+	URC (Unmanned Rice Counting) \cite{ref5} is a rice-panicle counting dataset containing about 1,000 training images collected under diverse field conditions. Its main challenges arise from the strong visual similarity between rice panicles and background vegetation, as well as dense overlap during later growth stages.
+	
+	Maize UAV is a self-collected UAV maize counting validation dataset introduced to complement the evaluation of model generalization under conditions closer to real deployment. Compared with the public benchmark MTC, it places greater emphasis on complex backgrounds, scale fluctuation, and target-density variation in real UAV acquisition scenarios. It is therefore better viewed as an additional validation domain than as a standard leaderboard-oriented benchmark. The dataset uses point annotations and independent train-validation split files. In this study, we used an input resolution of $512\times512$ to preserve fine-grained structural information in UAV imagery as much as possible.
+	
+	\subsection{Overall Framework and Plug-and-Play Design}
+	
+	MPAD-Net follows an encoder-decoder paradigm. Through standardized input-output interfaces, the framework inserts MSFF, MSAM, and DPD at fixed positions in the baseline network, enabling practical plug-and-play integration across compatible counting backbones. Under this design, modules can be inserted or removed to explicitly model scale variation and background interference, while the overall backbone topology and training pipeline remain unchanged. The overall workflow is illustrated in Fig.~\ref{fig:ablation}.
+	
+	\begin{figure}[pos=!htbp]
+		\centering
+		\includegraphics[width=0.90\linewidth,height=0.25\textheight,keepaspectratio]{figures/Fig2.png}
+		\caption{Illustration of module insertion positions and ablation settings in MPAD-Net. Using a VGG16-bn encoder and a simple decoder as the baseline, MSFF (P1), MSAM (P2), and DPD (P3) are inserted and evaluated individually or in combination, while the remaining structure is kept unchanged. This design emphasizes standardized module interfaces and reusability, which facilitates transfer to different backbone networks.}
+		\label{fig:ablation}
+	\end{figure}
+	
+	In this work, the plug-and-play property is defined by three operational constraints. First, each module preserves input and output spatial resolution and does not introduce additional scale levels, so the main feature flow is unchanged. Second, each module leaves the original backbone topology intact. Instead, it is attached through local enhancement or local replacement, allowing the backbone to be trained and deployed in its original manner. Third, each module does not rely on extra supervision signals or additional training procedures. The data setting, loss function, and training paradigm are therefore unchanged. Under these constraints, any performance gain can be attributed more directly to the module itself rather than to extra annotations or training tricks.
+	
+	The modular design of MPAD-Net aims to improve multi-scale adaptability and background suppression across different counting frameworks. MSFF introduces only a small amount of additional computation through parallel branches. MSAM adds multi-scale pooling and upsampling, but these operations remain lightweight, and most parameters are still concentrated in the simple mapping layers after each branch. DPD adopts a dual-branch structure with a density branch and an attention branch at the decoding stage, and therefore adds only a moderate number of parameters at that position. These extra costs remain within the scope of lightweight modular enhancement rather than full architectural redesign. All three modules preserve feature resolution, use standard tensor interfaces, and keep the supervision signal, loss function, and training pipeline unchanged. MPAD-Net thus provides a practical plug-in pathway for improving performance while maintaining training and deployment stability.
+	
+	\subsubsection{P1: Multi-Scale Feature Fusion Module (MSFF)}
+	
+	MSFF is designed not merely as a generic multi-scale enhancement block, but as a response-balancing unit for density-map regression under scale variation. In point-supervised counting, the network ultimately needs to map local visual patterns to a continuous density distribution whose integral yields the final count. When crop organs vary substantially in size across images, or even within the same image, a single receptive field tends to produce two typical errors: insufficient responses to small or distant targets, which weaken or even remove local density peaks, and over-smoothed responses to large or overlapping targets, which mix neighboring peaks and reduce separability. For wheat heads, maize tassels, and rice panicles in field scenes, both error types directly affect the stability of density integration and can therefore translate into counting bias.
+	
+	To alleviate this problem, MSFF explicitly models density cues at multiple receptive fields while keeping spatial resolution unchanged. As shown in Fig.~\ref{fig:msff}, the $1\times1$ branch emphasizes fine-grained local responses and helps maintain sharp density peaks for small or sparse targets; the $3\times3$ branch captures medium-range textures and local structural relationships; and the $5\times5$ branch provides broader contextual support that helps stabilize responses under occlusion, overlap, and scale expansion. By fusing these branches after channel-wise concatenation, MSFF preserves both local peak sensitivity and broader structural discrimination, enabling targets of different sizes to produce more balanced density responses in subsequent decoding. Let the input feature be $F_{\mathrm{in}}$. After concatenating the outputs of the three branches along the channel dimension, a $1\times1$ convolution, batch normalization, and ReLU are applied:
+	\begin{equation}
+		F_{\mathrm{out}}=\mathrm{Conv}_{\text{1$\times$1}}\Big([\mathrm{Conv}_{\text{1$\times$1}}(F_{\mathrm{in}}),\mathrm{Conv}_{\text{3$\times$3}}(F_{\mathrm{in}}),\mathrm{Conv}_{\text{5$\times$5}}(F_{\mathrm{in}})]\Big).
+		\label{eq:msff}
+	\end{equation}
+	This fusion is therefore more than a simple stacking of receptive fields. Instead, it rebalances the relationship among local density peaks, neighborhood textures, and target-level structural context, so that later decoding can recover density distributions from a more stable representation basis.
+	
+	\begin{figure}[pos=!htbp]
+		\centering
+		\includegraphics[width=0.90\linewidth,height=0.23\textheight,keepaspectratio]{figures/Fig3a.png}
+		\caption{Architecture of MSFF. Parallel multi-scale convolution branches extract features under different receptive fields and fuse them along the channel dimension to improve adaptation to scale variation.}
+		\label{fig:msff}
+	\end{figure}
+	
+	\subsubsection{P2: Multi-Scale Attention Module (MSAM)}
+	
+	MSAM is designed not simply to enhance salient regions, but more specifically to suppress spurious density responses induced by non-target textures in density-map regression. In field images, soil, leaves, shadows, canopy stripes, and inter-row structures often share local texture or intensity patterns with true crop organs. Under point-supervised density regression, these background components can be confused with target patterns and produce weak but spatially distributed responses outside true target regions. Although each false activation may be small, the final count is obtained by integrating the entire density map, so these background-induced responses can accumulate into substantial global counting errors. This phenomenon is especially common in rice-panicle scenes and complex UAV imagery.
+	
+	To address this issue, MSAM generates scale-aware attention maps across multiple spatial scales so that the network can distinguish true target-support regions from background regions that are only locally similar. The overall process of MSAM is shown in Fig.~\ref{fig:msam}. The module aggregates context through adaptive average pooling at four scales, upsamples the responses back to the original resolution, and fuses them with learnable weights $w_i$. Unlike single-scale attention, this mechanism does not merely ask whether a local pattern is salient; it also tests whether that pattern remains consistent with the expected target distribution under a broader spatial context. In this sense, the module functions as a context filter for density regression. The final attention map is generated by a Sigmoid function:
+	\begin{equation}
+		A=\sigma\!\left(\sum_{i=1}^{4} w_i \cdot \mathrm{Upsample}\big(\mathrm{FC}(\mathrm{Pool}_i(F))\big)\right),
+		\label{eq:msam}
+	\end{equation}
+	
+	\begin{figure}[pos=!htbp]
+		\centering
+		\includegraphics[width=0.90\linewidth,height=0.20\textheight,keepaspectratio]{figures/Fig3b.png}
+		\caption{Architecture of MSAM. Multi-scale pooling aggregates context and fuses it with learnable weights to generate scale-aware attention and suppress complex background interference.}
+		\label{fig:msam}
+	\end{figure}
+	
+	Here, $\sigma$ denotes the Sigmoid function. The resulting attention map $A$ is used to spatially reweight the input feature, for example through $F_{\mathrm{out}}=F\odot A$, optionally with a residual connection. For density-map regression, the key effect of this step is to reduce the erroneous contribution of non-target regions to the final integrated count while preserving density responses that are genuinely associated with crop organs. MSAM therefore serves not only feature selection, but also direct suppression of spurious density accumulation.
+	
+	\subsubsection{P3: Dual-Path Decoder (DPD)}
+	
+	DPD is the component of MPAD-Net that most directly targets the counting output, because it explicitly separates two questions that are often entangled in density-map regression: where density should be allocated and how much density should be assigned at that location. In a single-path decoder, spatial localization and density magnitude are usually inferred by the same feature stream. When background texture, target overlap, or local occlusion disturbs the representation, the decoder may produce low-intensity but spatially extended false activations in non-target regions, or overly diffuse outputs in high-density areas. In integral-based counting, such local errors do not simply cancel out. Instead, they accumulate over the entire map and can create large sample-level errors.
+	
+	To mitigate this issue, DPD adopts the dual-path decoding structure shown in Fig.~\ref{fig:dpd}, which contains a density branch and an attention branch in parallel. The density branch generates a candidate density map $D_{\mathrm{density}}$ and estimates local density magnitude, whereas the attention branch generates a spatial confidence map $D_{\mathrm{attn}}$ to identify locations that are more likely to support true target responses. In other words, the former answers ``how much,'' whereas the latter answers ``where.'' The final density map is obtained through element-wise multiplication:
+	\begin{equation}
+		D_{\mathrm{final}}=D_{\mathrm{density}}\cdot D_{\mathrm{attn}}.
+		\label{eq:dpd_final}
+	\end{equation}
+	This soft-gating mechanism allows the attention branch to constrain the spatial support of the density branch, thereby concentrating density allocation in more reliable target-support regions and suppressing area-type errors in irrelevant regions. Compared with merely increasing decoder capacity, DPD places greater emphasis on shaping the density distribution itself. This is particularly important in dense-overlap scenes and complex field backgrounds, where local misactivations can be repeatedly accumulated during density integration.
+	
+	\begin{figure}[pos=!htbp]
+		\centering
+		\includegraphics[width=0.80\linewidth,height=0.25\textheight,keepaspectratio]{figures/Fig3c.png}
+		\caption{Architecture of DPD. The density branch and the attention branch decode features in parallel and are fused by element-wise multiplication to achieve spatial gating and refine density prediction.}
+		\label{fig:dpd}
+	\end{figure}
+
+	\subsection{Implementation Details and Evaluation Metrics}
+	
+	\subsubsection{Loss Function}
+	
+	We used the mean squared error between the predicted density map and the ground-truth density map as the loss function:
+	\begin{equation}
+		L=\frac{1}{N}\sum_{i=1}^{N}\left\lVert D_i-\hat{D}_i\right\rVert_2^2,
+		\label{eq:mse}
+	\end{equation}
+	where $D_i$ and $\hat{D}_i$ denote the ground-truth density map and the predicted density map of the $i$th sample, respectively, and $N$ is the batch size.
+	
+	\subsubsection{Ground-Truth Density Map Generation}
+	
+	The ground-truth density map was generated by placing a Gaussian kernel at each annotated point:
+	\begin{equation}
+		D_{\mathrm{gt}}(p)=\sum_{i=1}^{M}\mathcal{N}(p; p_i, \sigma^2 I),
+		\label{eq:gt_gauss}
+	\end{equation}
+	where $p_i$ denotes the position of the $i$th annotation point, $M$ is the total number of annotation points, and $\sigma$ is the standard deviation of the Gaussian kernel, which is set to 8 pixels in our experiments.
+	
+	\subsubsection{Evaluation Metrics}
+	
+	We used MAE and MAPE to evaluate counting performance:
+	\begin{equation}
+		\mathrm{MAE}=\frac{1}{N}\sum_{i=1}^{N}\left|C_i-\hat{C}_i\right|,
+		\label{eq:mae}
+	\end{equation}
+	\begin{equation}
+		\mathrm{MAPE}=\frac{1}{N}\sum_{i=1}^{N}\frac{\left|C_i-\hat{C}_i\right|}{C_i}\times 100\%,
+		\label{eq:mape}
+	\end{equation}
+	where $C_i$ and $\hat{C}_i$ denote the ground-truth count and the predicted count, respectively.
+	
+	\section{Experimental Results}
+	
+	\subsection{Experimental Setup}
+	
+	All experiments were implemented in PyTorch and run on an NVIDIA RTX 4090 GPU. To isolate the effect of module insertion as much as possible, we used the same VGG16-bn encoder and lightweight decoder as a unified baseline and constructed eight ablation settings on each dataset: Baseline, P1 (MSFF), P2 (MSAM), P3 (DPD), P1+P2, P1+P3, P2+P3, and Full. Within each dataset, all compared variants shared the same data source, split protocol, and optimization pipeline. The only difference was the enabled combination of MPAD-Net modules.
+	
+	Because the datasets differ substantially in target scale and imaging conditions, the input resolution was adjusted for each dataset. Specifically, GWHD and MTC used $256\times256$, URC used $384\times384$, and Maize UAV used $512\times512$. These settings should be viewed as reasonable dataset-specific adaptations rather than uncontrolled variables. Under this setup, we focused on fair within-dataset comparisons of different module combinations and examined whether one complete modular configuration could remain the strongest default choice across heterogeneous agricultural counting scenarios.
+	
+	We used MAE as the primary metric in the ablation study because it is the most direct and interpretable metric for crop counting. We also report the best epoch, the absolute MAE reduction relative to the baseline, the relative gain, and the ranking of all variants within each dataset, providing a more complete view of performance differences and stability across module combinations.
+	
+	\subsection{Cross-Dataset Ablation Study}
+	
+	As shown in Fig.~\ref{fig:cross_dataset_heatmap} and Table~\ref{tab:cross_dataset_ablation}, the updated cross-dataset ablation reveals a clear overall pattern: the Full configuration achieved the best MAE on all four datasets. This indicates that the three modules provided the strongest overall complementarity when enabled together in the current framework. At the same time, the relative gains and secondary rankings still varied across datasets, showing that the contribution of each individual module remained data-dependent. Table~\ref{tab:best_variant_summary} summarizes the best configuration on each dataset and its gain relative to the baseline, and Table~\ref{tab:variant_ranking} reports the complete ranking of all variants within each dataset.
+	
+	\begin{figure}[pos=!htbp]
+		\centering
+		\includegraphics[width=0.80\linewidth,height=0.40\textheight,keepaspectratio]{figures/Fig4.png}
+		\caption{Cross-dataset ablation heatmap. Colors indicate normalized MAE levels within each dataset, and each cell reports the original MAE value.}
+		\label{fig:cross_dataset_heatmap}
+	\end{figure}
+	
+	\begin{table}[!htbp]
+		\centering
+		\caption{Cross-dataset ablation results of MPAD-Net on three public crop-counting datasets and one UAV maize dataset. The evaluation metric is MAE, and lower values indicate better performance.}
+		\label{tab:cross_dataset_ablation}
+		\begin{tabular}{lrrrr}
+			\toprule
+			Variant & GWHD & MTC & URC & Maize UAV \\
+			\midrule
+			Baseline  & 7.6100 & 37.3314 & 85.7148 & 77.9293 \\
+			P1 (MSFF) & 7.2473 & 22.5099 & 74.1605 & 66.9478 \\
+			P2 (MSAM) & 6.5745 & 28.5607 & 69.6296 & 70.6037 \\
+			P3 (DPD)  & 6.3525 & 24.8916 & 65.9447 & 56.6309 \\
+			P1+P2     & 6.3327 & 22.8790 & 69.9027 & 61.7055 \\
+			P1+P3     & 6.1825 & 22.7898 & 40.9710 & 42.9097 \\
+			P2+P3     & 6.3769 & 27.1460 & 61.7099 & 47.3541 \\
+			Full      & 5.8288 & 17.3214 & 40.1190 & 28.3469 \\
+			\bottomrule
+		\end{tabular}
+	\end{table}
+	
+	On GWHD, all major module combinations outperformed the baseline, and Full achieved the lowest MAE of 5.8288, followed by P1+P3 at 6.1825 and P1+P2 at 6.3327. This result indicates that in scenes with large wheat-head scale variation and relatively dense target distributions, stable density-peak formation depends on both front-end multi-scale representation and output-side spatial constraint. The performance of P1+P3 already demonstrates the effectiveness of the ``scale modeling + decoder gating'' combination, whereas the further reduction achieved by Full suggests that additional background purification led to a more complete correction of the density distribution.
+	
+	On MTC, the MAE decreased from the baseline value of 37.3314 to 17.3214 for Full, followed by P1, P1+P3, and P1+P2. Compared with GWHD, this ranking places greater emphasis on front-end representation, suggesting that in maize tassel scenes the encoding stage provides an important foundation for describing target structure and stabilizing local density peaks. However, representation enhancement alone was insufficient to achieve the best result. Once attention filtering and decoder-side gating were additionally introduced, canopy-induced spurious density and output-side error diffusion were both suppressed, and the overall counting error shrank accordingly.
+	
+	On URC, Full achieved 40.1190 and P1+P3 achieved 40.9710, both far better than the baseline value of 85.7148, and the strongest variants all included P3. This pattern indicates that output-side spatial constraint is a key mechanism for limiting the spread of integration error when rice panicles are highly similar to background texture and often densely overlapped. At the same time, the additional advantage of Full over P1+P3 shows that scale modeling and decoder gating alone were still insufficient to completely remove background confusion, and that earlier suppression of spurious density remained beneficial.
+	
+	On Maize UAV, the MAE decreased sharply from 77.9293 to 28.3469, with P1+P3 at 42.9097 and P2+P3 at 47.3541 ranking next. Compared with the public benchmarks, this self-collected UAV dataset more directly reflects the effects of complex backgrounds, scale fluctuation, and deployment-domain variation on density-map counting. The stronger performance of configurations that included P3 indicates that restricting the spatial spread of false density at the output stage is especially important under realistic deployment conditions. The result of Full further suggests that total counting error was best controlled only when multi-scale modeling, background purification, and decoding constraint were used together.
+	
+	Taken together, the four datasets exhibited a consistent overall trend under the current framework: although secondary rankings and improvement magnitudes still varied with the data distribution, the best result always corresponded to the joint configuration of all three modules. This means that dataset characteristics do affect the relative importance of different mechanisms, but the synergy among scale modeling, background purification, and decoder-side constraint remained stable across heterogeneous agricultural counting scenarios. This overall trend is also visible in Fig.~\ref{fig:baseline_full_gain}.
+	
+	\begin{figure}[pos=!htbp]
+		\centering
+		\includegraphics[width=0.70\linewidth,height=0.30\textheight,keepaspectratio]{figures/Fig5.png}
+		\caption{MAE comparison between the baseline and MPAD-Net across the four datasets.}
+		\label{fig:baseline_full_gain}
+	\end{figure}
+	
+	\begin{table}[!htbp]
+		\centering
+		\caption{Summary of the best configuration on each dataset and its gain relative to the baseline.}
+		\label{tab:best_variant_summary}
+		\begin{tabular}{llrrrrr}
+			\toprule
+			Dataset & Best Variant & Best Epoch & Baseline MAE & Best MAE & $\Delta$MAE & Relative Gain \\
+			\midrule
+			GWHD      & Full & 69 & 7.6100  & 5.8288  & 1.7812  & 23.4\% \\
+			MTC       & Full & 59 & 37.3314 & 17.3214 & 20.0100 & 53.6\% \\
+			URC       & Full & 24 & 85.7148 & 40.1190 & 45.5958 & 53.2\% \\
+			Maize UAV & Full & 88 & 77.9293 & 28.3469 & 49.5824 & 63.6\% \\
+			\bottomrule
+		\end{tabular}
+	\end{table}
+	
+	\begin{table}[!htbp]
+		\centering
+		\caption{Variant ranking within each dataset, sorted by MAE from low to high.}
+		\label{tab:variant_ranking}
+		\begin{tabular}{rllll}
+			\toprule
+			Rank & GWHD & MTC & URC & Maize UAV \\
+			\midrule
+			1 & Full     & Full     & Full     & Full \\
+			2 & P1+P3    & P1       & P1+P3    & P1+P3 \\
+			3 & P1+P2    & P1+P3    & P2+P3    & P2+P3 \\
+			4 & P3       & P1+P2    & P3       & P3 \\
+			5 & P2+P3    & P3       & P2       & P1+P2 \\
+			6 & P2       & P2+P3    & P1+P2    & P1 \\
+			7 & P1       & P2       & P1       & P2 \\
+			8 & Baseline & Baseline & Baseline & Baseline \\
+			\bottomrule
+		\end{tabular}
+	\end{table}
+	
+	The ranking results refine rather than weaken the main conclusion. Although Full ranked first on all four datasets, the second-tier and third-tier combinations still varied across GWHD, MTC, URC, and Maize UAV. This indicates that the proposed modules remain analytically meaningful as composable units: even though the complete configuration is now the strongest overall choice, the data distribution still influences which partial combinations are most competitive.
+	
+	\FloatBarrier
+	
+	\subsection{Comparison with Existing Methods}
+	
+	In Table~\ref{tab:sota_gwhd}, we compare MPAD-Net with representative counting methods on the GWHD benchmark, including the classical density-map-regression framework MCNN and strong methods tailored to this dataset, such as CAN and MPCount. MPAD-Net achieved an MAE of 5.83 on GWHD, clearly outperforming MCNN at 12.03, CAN at 8.31, and the VGG16-bn baseline at 7.61. MPAD-Net also showed stable advantages on the remaining metrics: its MSE and RMSE were 58.12 and 7.62, respectively, both substantially lower than CAN's 118.45 and 10.88; its $R^2$ and Acc@5 reached 0.91 and 59.5\%, respectively, both better than those of the baseline model and CAN. Although the overall performance of MPAD-Net on this dataset was still lower than that of MPCount, these results indicate that the proposed method remained strongly competitive while preserving module reusability and cross-architecture transfer potential.
+	
+	\begin{longtable}{lccccc}
+		\caption{Comparison with representative methods on GWHD.}
+		\label{tab:sota_gwhd}\\
+		\hline
+		Method & MAE$\downarrow$ & MSE$\downarrow$ & RMSE$\downarrow$ & R$^2\uparrow$ & Acc@5$\uparrow$ \\
+		\hline
+		\endfirsthead
+		\caption[]{Comparison with representative methods on GWHD (continued).}\\
+		\hline
+		Method & MAE$\downarrow$ & MSE$\downarrow$ & RMSE$\downarrow$ & R$^2\uparrow$ & Acc@5$\uparrow$ \\
+		\hline
+		\endhead
+		\hline
+		\endfoot
+		\hline
+		\endlastfoot
+		MCNN \cite{ref20}      & 12.03 & 245.82 & 15.68 & 0.65 & 28.8\% \\
+		CAN \cite{ref23}       & 8.31  & 118.45 & 10.88 & 0.83 & 42.3\% \\
+		MPCount \cite{ref58}   & 4.89  & 45.26  & 6.73  & 0.94 & 66.7\% \\
+		VGG16-bn (Baseline)    & 7.61  & 98.54  & 9.93  & 0.86 & 45.6\% \\
+		MPAD-Net (Ours)        & 5.83  & 58.12  & 7.62  & 0.91 & 59.5\% \\
+	\end{longtable}
+	
+	\subsection{Cross-Architecture Transferability}
+	
+	The cross-architecture transfer experiment provides additional evidence for the plug-and-play property of MPAD-Net. If a plug-and-play framework works only on its native backbone, its claim of module generalization remains incomplete. Cross-dataset gains alone are therefore insufficient to establish transfer value. Table~\ref{tab:mpcount} summarizes the results obtained after inserting MSFF, MSAM, and DPD into a re-implemented MPCount backbone under a unified local training and evaluation pipeline. On GWHD and MTC, all four inserted variants outperformed the re-implemented MPCount baseline, and the Full configuration achieved the lowest MAE on both datasets. This indicates that the gains of the proposed modules were not limited to the native MPAD-Net backbone or to a single training distribution.
+	
+	This result complements the cross-dataset ablation study. The native MPAD-Net experiments show that, although secondary rankings still depended on the data distribution, Full remained the best overall configuration across the four datasets. The MPCount transfer results further indicate that the value of these modules is not limited to the VGG16-bn encoder-decoder framework itself. Taken together, these findings support a calibrated interpretation of MPAD-Net: it should be understood as a reusable modular enhancement framework whose complete configuration serves as the strongest default choice under the current setting and whose modules remain effective beyond the native architecture.
+	
+	\begin{figure}[pos=!htbp]
+		\centering
+		\includegraphics[width=0.78\linewidth,height=0.24\textheight,keepaspectratio]{figures/Fig6.png}
+		\caption{MAE comparison after integrating MPAD-Net modules into a re-implemented MPCount backbone on GWHD and MTC. The figure shows the performance change of MSFF, MSAM, DPD, and the Full configuration relative to the re-implemented MPCount baseline under the unified local pipeline.}
+		\label{fig:mpcount_transfer}
+	\end{figure}
+	
+	\begin{table}[!htbp]
+		\centering
+		\caption{Results of integrating MPAD-Net modules into a re-implemented MPCount backbone under the unified local pipeline on GWHD and MTC.}
+		\label{tab:mpcount}
+		\begin{tabular}{lrrrr}
+			\toprule
+			Method & GWHD MAE$\downarrow$ & GWHD Gain & MTC MAE$\downarrow$ & MTC Gain \\
+			\midrule
+			MPCount baseline        & 4.2467 & --     & 4.6330 & -- \\
+			MPCount + P1 (MSFF)     & 3.9882 & +6.1\% & 3.9264 & +15.3\% \\
+			MPCount + P2 (MSAM)     & 4.0135 & +5.5\% & 4.5270 & +2.3\% \\
+			MPCount + P3 (DPD)      & 4.0935 & +3.6\% & 4.0984 & +11.5\% \\
+			MPCount + Full          & 3.9807 & +6.3\% & 3.8013 & +18.0\% \\
+			\bottomrule
+		\end{tabular}
+	\end{table}
+	
+	\subsection{Qualitative and Consistency Analysis}
+	
+	To further analyze model behavior beyond aggregate error metrics, we compared Baseline and Full from two complementary perspectives: spatial response quality and sample-level count consistency. Each row of Fig.~\ref{fig:qualitative_results} corresponds to one dataset, and each column shows the input image, the point-annotated ground truth, and the density responses of Baseline and Full, respectively.
+	
+	More specifically, the four datasets in Fig.~\ref{fig:qualitative_results} exhibited different yet consistent improvement patterns. On GWHD, the responses of Full were more concentrated around wheat-head regions and formed clearer local high-response areas around individual heads, whereas the Baseline showed more diffuse activation over leaves and background textures, and responses between adjacent heads were more likely to become mixed. On MTC, because maize tassels are relatively small and surrounded by canopy leaves, the responses of the Baseline were dispersed over leaf textures and failed to highlight true tassel locations clearly; by contrast, Full formed more localized responses at sparse target positions and reduced large-area background activation. On URC, where targets are dense and visually similar to the background, the Baseline produced a large number of low-intensity noisy responses over the entire image, making targets difficult to distinguish from the background, whereas Full preserved target-related responses while clearly reducing false responses on soil and vegetation textures. The same pattern was also visible on Maize UAV: the Baseline still exhibited widespread background activation, whereas Full produced a more restrained response distribution concentrated mainly in target-related regions, indicating more stable control of spurious density under realistic deployment conditions.
+	
+	These differences suggest that the advantage of Full was not merely reflected in the visual appearance of the response maps, but in its simultaneous reduction of background misactivation and improvement of the separability of local density peaks in target regions, thereby yielding more stable global counts.
+	
+	\begin{figure}[pos=!htbp]
+		\centering
+		\includegraphics[width=0.85\linewidth,height=0.65\textheight,keepaspectratio]{figures/Fig7.png}
+		\caption{Qualitative comparison across the four datasets. Each row corresponds to one dataset, and the columns show the input image, point-annotated ground truth, and the density responses of Baseline and Full, respectively. The figure is used to compare the two models in terms of target-location alignment, local density-peak concentration, separation between adjacent targets, and control of spurious responses in background regions, thereby revealing the spatial error patterns behind global counting errors.}
+		\label{fig:qualitative_results}
+	\end{figure}
+	
+	Figs.~\ref{fig:count_consistency_baseline} and \ref{fig:count_consistency_full} further show the relationships between observed and predicted counts for the two models on the four validation datasets. Taken together, these results indicate that the gains of MPAD-Net were reflected not only in lower average error, but also in more coherent spatial responses and more stable sample-level prediction behavior.
+
+	These visual improvements were further reflected in sample-level count consistency. Compared with the Baseline, the Full model showed a tighter concentration around the diagonal on MTC, URC, and Maize UAV, indicating a more stable correspondence between predicted and observed counts. From the viewpoint of counting mechanisms, this consistency gain implies that the model formed more reliable local density peaks in target regions while reducing spurious density in background regions that would otherwise accumulate after integration. The improvement was especially pronounced on URC and Maize UAV, suggesting that under complex backgrounds or highly mixed textures, MPAD-Net not only reduced average error, but also suppressed sample-level fluctuations. On GWHD, both models maintained a stable positive trend, although some underestimation remained in high-count wheat-head scenes. MTC was more dispersed because its validation set was smaller and sample-to-sample variation was stronger, but the Full model still preserved a clearer observed-predicted relationship overall.
+	
+	\begin{figure}[pos=!htbp]
+		\centering
+		\includegraphics[width=0.90\linewidth,height=0.90\textheight,keepaspectratio]{figures/Fig8}
+		\caption{Observed-versus-predicted count consistency of the Baseline model on GWHD, MTC, URC, and Maize UAV. Each point denotes one validation image, and wider dispersion reflects lower sample-level consistency.}
+		\label{fig:count_consistency_baseline}
+	\end{figure}
+	
+	\begin{figure}[pos=!htbp]
+		\centering
+		\includegraphics[width=0.90\linewidth,height=0.90\textheight,keepaspectratio]{figures/Fig9}
+		\caption{Observed-versus-predicted count consistency of the Full model on GWHD, MTC, URC, and Maize UAV. Each point denotes one validation image, and tighter clustering indicates greater sample-level stability.}
+		\label{fig:count_consistency_full}
+	\end{figure}
+	
+	\FloatBarrier
+	
+	\section{Discussion}
+
+	The purpose of this discussion is not only to explain how each module behaves on different datasets, but also to clarify how these findings collectively support the framework-level positioning of MPAD-Net. Overall, the experiments on the four datasets do not suggest that any single module consistently dominates all scenarios. Instead, they show that the three modules function as composable enhancement units that form stable system-level complementarity under heterogeneous agricultural conditions. In particular, the Full configuration achieved the best MAE on all four datasets, even though the secondary rankings still varied with the data distribution. This suggests that the advantage of MPAD-Net arises primarily from the coordinated effect of standardized module combinations rather than from local structural adaptation to any single dataset. On this basis, the following subsections discuss the scope of each module and its contribution to the overall framework.
+	
+	\subsection{Scope and Synergy Conditions of Multi-Scale Feature Fusion}
+	
+	From the perspective of counting mechanisms, the main role of MSFF is not simply to enlarge the receptive field, but to alleviate the imbalance of density responses produced by targets of different scales \cite{ref20,ref4}. When target size varies substantially, encoded features that are overly biased toward one fixed scale may produce weak density peaks for small targets, unstable local responses for sparse targets, or over-smoothed responses that merge larger targets with their neighbors. Although these errors first arise at the local feature level, they ultimately reduce density-peak separability and destabilize integral-based counting. On GWHD, MSFF alone yielded a stable gain, suggesting that rebalancing local detail and broader structural context can directly improve target-peak formation when wheat-head scale varies widely and scene sources are diverse.
+	
+	By contrast, the gain of MSFF on MTC and URC depended more strongly on cooperation with other modules. In MTC, the top-view UAV perspective leads to a relatively concentrated scale distribution, so simply enriching multi-scale representation is not the main bottleneck. In URC, rice panicles are highly similar to leaf texture, and enhancing multi-scale context alone may also strengthen background patterns and introduce additional spurious density. MSFF is therefore better understood as a front-end support module for density-peak modeling rather than as a unit that independently dominates performance on every dataset. Its value lies in providing a more balanced multi-scale feature basis for subsequent background suppression and spatial gating, so that targets at different scales can form responses that are more stable, separable, and integrable in the density map.
+	
+	\subsection{Multi-Scale Attention and Background Suppression}
+	
+	From the viewpoint of density regression, the value of MSAM lies in reducing the erroneous contribution of non-target regions to the final count rather than in generic background suppression alone. Soil particles, leaf textures, shadow bands, and canopy structures in field scenes often exhibit local visual patterns that resemble true targets. If such patterns are incorrectly mapped to weak density responses, the resulting errors may appear small at individual locations but can still accumulate into substantial global bias after integration over the whole map. Unlike SE and CBAM, which mainly focus on channel recalibration or single-scale spatial attention \cite{ref29,ref27}, MSAM aggregates context across multiple spatial scales and fuses it adaptively with learnable weights. This makes it better suited to distinguish background textures that are locally similar but globally inconsistent from true target-support regions that remain plausible across scales.
+	
+	The ablation results show that the role of MSAM varies across datasets. It yielded a clear gain on both GWHD and MTC, indicating that multi-scale context filtering effectively reduced background-induced spurious density in these scenes. On URC, by contrast, the effect of MSAM was expressed more strongly through interaction with DPD, suggesting that when targets and background are highly mixed in texture, feature-level attention alone is insufficient to fully eliminate integration error and still requires decoder-side spatial gating to further constrain the density distribution. In this sense, MSAM is best understood as a density-response purification module: it reduces the probability that background texture will enter the density map and provides subsequent modules with a cleaner and more counting-relevant feature basis.
+	
+	\subsection{Contribution of Dual-Path Decoding and Spatial Gating}
+	
+	The contribution of DPD can be understood even more directly from the formation of counting error. In density-map regression, the most damaging error is not always a slight displacement of the strongest local response, but often the presence of low-intensity false activations that persist over relatively large areas, because these responses continuously accumulate during integration and eventually create large sample-level errors. The parallel density path and attention path in DPD effectively separate density-magnitude estimation from spatial-support constraint and then recouple them through soft gating. Element-wise multiplication is effective not simply because it enhances salient regions, but because it uses a spatial confidence map to restrict the support of the candidate density map, thereby reducing area-type errors in irrelevant regions while preserving valid density peaks at target locations.
+	
+	This mechanism yielded clear gains on multiple datasets. On GWHD, P3 was the strongest single-module configuration, and on URC and Maize UAV, combinations that included P3 consistently remained near the top. This indicates that decoder-stage spatial constraint is especially important for reducing integration error under dense targets, complex texture, and realistic UAV conditions. When encoder features cannot reliably separate targets from background on appearance alone, DPD further compresses the spatial spread of spurious density at the output stage and concentrates valid responses onto true target-support regions. At the same time, the strongest overall result was still achieved by Full, indicating that decoder-side gating is a critical mechanism for stable counting, but reaches its full effect only when combined with multi-scale representation and background purification. The fact that MSFF+DPD was much better than MSFF alone on URC further reinforces this point: without output-side spatial constraint, the response expansion introduced by multi-scale enhancement does not necessarily translate automatically into more accurate counting.
+	
+	\subsection{Plug-and-Play Ability and Evidence of Transferability}
+	
+	From the overall results, the main value of MPAD-Net does not lie in any single module dominating every scenario, but in the fact that the three modules operate as composable enhancement units that preserve stable system-level complementarity under different data distributions. Across the four datasets, the best MAE was always achieved by the Full configuration, even though the secondary rankings varied with crop type, target density, background texture, and imaging condition. This indicates that the advantage of MPAD-Net does not primarily arise from local adaptation to any single dataset, but from the stable synergy of standardized module combinations in complex agricultural scenes. Furthermore, when these modules were transferred to the re-implemented MPCount backbone, they still brought consistent gains, suggesting that this benefit does not depend entirely on the native encoder-decoder structure. Taken together, these results support interpreting MPAD-Net as a modular enhancement framework for field crop counting rather than as a specific network design effective only for one backbone or one dataset.
+	
+	\section{Conclusion}
+	
+	We proposed MPAD-Net as a modular and transferable enhancement framework for field crop counting rather than as a counting network optimized for a specific dataset. By organizing the multi-scale feature fusion module MSFF, the multi-scale attention module MSAM, and the dual-path decoder DPD through standardized interfaces, MPAD-Net achieved coordinated improvements in multi-scale representation enhancement, complex background suppression, and decoder-stage spatial refinement without changing the basic topology or training paradigm of compatible backbones.
+	
+	Systematic experiments on four heterogeneous agricultural counting scenarios, namely GWHD, MTC, URC, and Maize UAV, showed that the Full configuration achieved the best MAE on all four datasets, indicating that the complete modular system provides a stable overall advantage in complex field environments. In other words, the contribution of MPAD-Net is reflected not only in improved aggregate error metrics, but also in more reliable local density-peak formation and reduced accumulation of spurious density responses. Furthermore, when the proposed modules were integrated into a re-implemented MPCount backbone as independent plug-ins, they still yielded performance gains, with the Full configuration remaining the best in both transfer settings. These results indicate that MPAD-Net has cross-scene effectiveness and practical cross-architecture reuse potential.
+	
+	Future work may extend the evaluation of this framework to a broader range of external backbones, stricter cross-domain settings, and finer-grained annotation conditions, in order to further improve localization interpretability, transfer robustness, and practical deployment value.
+	
+	\section*{CRediT Author Contribution Statement}
+	\noindent
+	\begin{tabularx}{\linewidth}{@{}p{3cm}X@{}}
+		Yuxiang Liu: & Conceptualization, methodology, software, visualization, data curation, experiments and analysis, and writing of the original draft. \\
+		Rongyue Wei: & Supervision, validation, experimental support, review and editing. \\
+		Fuquan Zhang: & Supervision, validation, experimental support, review and editing. \\
+	\end{tabularx}
+	
+	\section*{Funding}
+	\noindent This research did not receive any specific grant from funding agencies in the public, commercial, or not-for-profit sectors.
+	
+	\section*{Conflict of Interest}
+	\noindent The authors declare no known competing financial interests or personal relationships that could have appeared to influence the work reported in this paper.
+	
+	\section*{Data Availability}
+	\noindent The datasets used in this study are available as follows: \\
+	GWHD\_2021: Global Wheat Dataset, \url{https://www.global-wheat.com/}. \\
+	MTC: Maize Tassels Counting dataset, \url{https://github.com/poppinace/mtc}. \\
+	URC: UAV rice counting dataset. It is available from the original authors upon reasonable request or can be provided if required by the journal. \\
+	Maize UAV: A self-collected UAV maize counting validation dataset. Because it contains proprietary self-collected data, it can be provided upon reasonable request or if required during peer review. \\
+
+	\section*{Declaration of Generative AI and AI-assisted technologies in the writing process}
+	\noindent During the preparation of this work, the authors used OpenAI Codex for language polishing and editing assistance. After using this tool, the authors reviewed and edited the content as needed and take full responsibility for the content of the published article.
+	
+	\bibliographystyle{unsrtnat}
+	\bibliography{references}
+	
+\end{document}

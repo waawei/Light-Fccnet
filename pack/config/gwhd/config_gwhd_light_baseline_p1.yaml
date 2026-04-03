@@ -1,0 +1,71 @@
+model:
+  name: light_fccnet
+  in_channels: 3
+  input_size:
+  - 256
+  - 256
+  stage_channels:
+  - 32
+  - 64
+  - 96
+  - 128
+  fusion_channels: 96
+  spatial_max_tokens: 1024
+  use_p1: true
+  use_p2: false
+data:
+  sigma: 6
+  attention_radius: 5
+  gwhd_train_csv: /root/autodl-tmp/datasets/gwhd_2021/competition_train.csv
+  gwhd_val_csv: /root/autodl-tmp/datasets/gwhd_2021/competition_val.csv
+  gwhd_images_dir: /root/autodl-tmp/datasets/gwhd_2021/images
+  urc_root: ''
+  mtc_root: ''
+  use_coarse_dropout: false
+  use_random_resized_crop: false
+  horizontal_flip_p: 0.5
+  use_color_jitter: true
+  color_jitter_p: 0.3
+  color_jitter_brightness: 0.15
+  color_jitter_contrast: 0.15
+  color_jitter_saturation: 0.15
+  color_jitter_hue: 0.05
+training:
+  batch_size: 16
+  num_epochs: 100
+  learning_rate: 1.0e-05
+  loss_type: light_fcc
+  use_p3_loss: false
+  alpha: 0.1
+  ldms_k: 3
+  ldms_factor: 1.0
+  ldms_max_ratio: 0.05
+  match_box_width: 4.0
+  match_box_height: 8.0
+  ssim_window: 11
+  ssim_c: 0.0001
+  num_workers: 4
+  optimizer:
+    type: Adam
+    weight_decay: 0.0001
+    betas:
+    - 0.9
+    - 0.999
+    eps: 1.0e-08
+  scheduler:
+    type: StepLR
+    step_size: 30
+    gamma: 0.5
+eval:
+  val_freq: 1
+  save_freq: 200
+  metrics:
+  - MAE
+  - MSE
+  - MAPE
+paths:
+  checkpoint_dir: /root/checkpoints/gwhd_light_baseline_p1
+  log_dir: /root/tf-logs/gwhd_light_baseline_p1
+seed: 42
+use_amp: false
+pin_memory: true

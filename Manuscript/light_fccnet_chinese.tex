@@ -1,0 +1,487 @@
+\documentclass[a4paper,fleqn]{cas-sc}
+
+\usepackage{float}
+\usepackage[section]{placeins}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{tabularx}
+
+\setcounter{topnumber}{3}
+\setcounter{bottomnumber}{2}
+\setcounter{totalnumber}{5}
+
+\renewcommand{\topfraction}{0.90}
+\renewcommand{\bottomfraction}{0.80}
+\renewcommand{\textfraction}{0.08}
+\renewcommand{\floatpagefraction}{0.85}
+
+\setlength{\textfloatsep}{10pt plus 2pt minus 2pt}
+\setlength{\floatsep}{8pt plus 2pt minus 2pt}
+\setlength{\intextsep}{8pt plus 2pt minus 2pt}
+\makeatletter
+\setlength{\@fptop}{0pt}
+\setlength{\@fpsep}{8pt plus 1fil}
+\setlength{\@fpbot}{0pt plus 1fil}
+\makeatother
+
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{fontspec}
+\usepackage{xeCJK}
+
+\usepackage[numbers]{natbib}
+\usepackage{hyperref}
+\hypersetup{hidelinks}
+\usepackage{lineno}
+
+\newcommand{\sep}{\quad}
+\newcommand{\tablesize}{\small}
+
+\captionsetup[table]{
+    font=small,
+    labelfont=bf,
+    justification=raggedright,
+    singlelinecheck=false,
+    skip=4pt
+}
+\renewcommand{\arraystretch}{1.12}
+
+\setmainfont{Times New Roman}
+\setsansfont{Arial}
+\setmonofont{Consolas}
+\setCJKmainfont[BoldFont=Microsoft YaHei]{SimSun}
+\setCJKsansfont{Microsoft YaHei}
+\setCJKmonofont{SimSun}
+\XeTeXlinebreaklocale "zh"
+\XeTeXlinebreakskip = 0pt plus 1pt
+\setlength{\emergencystretch}{2em}
+
+\begin{document}
+\let\WriteBookmarks\relax
+\def\floatpagepagefraction{1}
+\def\textpagefraction{.001}
+
+\shorttitle{Light-FCCNet用于田间作物计数}
+\shortauthors{Y. Liu et al.}
+
+\title[mode = title]{\texorpdfstring{Light-FCCNet：一种结合金字塔聚合、注意力融合\\与 FCC 损失的轻量化田间作物计数网络}{Light-FCCNet：一种结合金字塔聚合、注意力融合与 FCC 损失的轻量化田间作物计数网络}}
+
+\author{Yuxiang Liu}
+\author{Rongyue Wei}
+\author{Fuquan Zhang}
+
+\begin{abstract}
+对小麦穗、玉米雄穗和水稻穗的精确计数对于田间表型分析、作物监测和产量相关分析具有重要意义。然而，现有基于密度图回归的计数方法通常计算开销较大，因此在计算资源受限的农业场景中不利于高效部署。同时，显著的目标尺度变化、密集重叠以及复杂背景仍使得模型难以在抑制非目标区域伪密度激活的同时保留可靠作物响应。为解决这些问题，本文提出 Light-FCCNet，一种围绕三个协同组件构建的轻量化田间作物计数网络：轻量化特征金字塔聚合模块、多重注意力融合模块以及面向计数优化的 FCC 损失。所提框架在降低参数成本的同时增强多尺度表征，通过空间与通道注意力强化特征融合，并通过联合考虑像素级密度回归、计数一致性和结构相似性改进优化过程。我们在三个公开田间作物计数数据集（GWHD、MTC、URC）上评估 Light-FCCNet。在由 \textit{baseline}、\textit{baseline\_p1}、\textit{baseline\_p1\_p2} 和 \textit{full} 组成的渐进式规范消融设置下，完整模型在三个数据集上均取得最优性能，MAE 分别达到 13.2849（GWHD）、18.1003（MTC）和 61.5534（URC）。这些结果表明，所提出的轻量化设计在不同农业计数场景中可带来稳定增益，且金字塔聚合、注意力引导融合与 FCC 损失的完整组合能够获得最强的总体性能。
+\end{abstract}
+
+\begin{keywords}
+田间作物计数 \sep 轻量化网络 \sep 密度图回归 \sep 特征金字塔聚合 \sep 注意力融合 \sep 损失函数设计
+\end{keywords}
+
+\maketitle
+
+\section{引言}
+\linenumbers
+
+田间作物计数是智慧农业中的关键任务，因为小麦穗、玉米雄穗和水稻穗的数量与作物生长监测、表型分析和产量估计密切相关。精确的器官计数可支持育种筛选、栽培管理和大规模田间评估，尤其在需要于真实室外环境下快速测量作物群体时更为重要。随着无人机平台和高分辨率田间成像的广泛应用，自动化作物计数变得更具可行性，但同时也更具挑战性：真实田间图像通常存在明显尺度变化、目标重叠、阴影、背景植被及纹理杂乱等问题。即使采用较强的视觉模型，这些因素仍会显著增加可靠计数的难度。
+
+深度学习已成为农业计数的主流方案，而密度图回归仍是最广泛使用的范式之一，因为其能够处理密集目标并保留空间分布信息。密度图方法并非直接预测标量计数，而是估计致密响应场，再通过对预测密度图积分得到最终计数。该形式特别适用于拥挤农业场景，其中目标通常小、数量多且存在部分遮挡。然而，最终计数质量高度依赖局部密度响应质量。若模型无法为真实作物器官保留清晰局部峰值，或在背景区域产生微弱伪响应，这些误差会在密度积分过程中累积并降低计数精度。
+
+尽管近期计数方法已取得较好表现，但面向田间部署仍存在两个关键问题。第一，许多高性能模型计算负担依然较重，常依赖大型主干或多分支结构，导致参数量和内存开销较高，从而限制其在实际农业应用中的效率。第二，即便整体架构有效，现有方法也未必能同时兼顾轻量化设计与稳健多尺度建模。在田间场景中，作物器官尺度会随拍摄高度、视角、生长阶段和品种差异而显著变化。缺乏足够尺度感知能力的轻量模型可能丢失细粒度目标线索，而更强但更重的模型又不利于高效应用。
+
+背景干扰进一步加剧了这一问题。在农业图像中，叶片、茎秆、土壤纹理和阴影等非目标区域常与作物器官在视觉上相似。在密度图回归框架下，这类背景纹理可能诱导出微弱但空间分布广的伪响应。虽然这些误差在局部看似较小，但在整图积分后可能引入明显的全局偏差。因此，一个有效的田间作物计数模型不仅需要捕获多尺度作物特征，还需要在特征融合阶段抑制无关响应，并以面向计数的方式优化密度预测。
+
+为解决上述问题，本文研究一种源自 Light-FCCNet 设计的轻量化计数架构。该方法由三个协同组件构成。首先，轻量化特征金字塔聚合模块以较低计算成本构建多尺度表征，并作为处理目标尺度变化的核心结构机制。其次，多重注意力融合模块结合空间注意力与通道注意力，强化特征交互并减少多尺度融合中的信息损失。第三，FCC 损失通过联合考虑像素级密度回归、计数级一致性与预测/目标密度图之间的结构相似性来改进优化。三者共同构成一套轻量化农业计数框架，更契合高效部署的实际需求，同时保持较强计数性能。
+
+本文在三个公开田间作物计数数据集（GWHD、MTC、URC）上评估 Light-FCCNet。为明确各组件作用，我们采用由 \textit{baseline}、\textit{baseline\_p1}、\textit{baseline\_p1\_p2} 与 \textit{full} 构成的渐进式规范消融链组织实验。该设置可对轻量化金字塔聚合、多重注意力融合与 FCC 损失的效应进行一致且连贯的解释。复现实验结果表明，完整配置在三个数据集上均取得最佳性能，说明三类组件在异构农业场景中具有稳定互补性。
+
+本文主要贡献如下：
+\begin{enumerate}
+    \item 提出 Light-FCCNet，一种融合特征金字塔聚合、多重注意力融合与 FCC 损失的轻量化田间作物计数网络，用于解决农业场景中的尺度变化、背景干扰与面向计数的优化问题。
+    \item 重构方法描述与规范消融设置，将三个核心组件统一解释为轻量化金字塔聚合（P1）、多重注意力融合（P2）与 FCC 损失（P3），从而提供清晰且可复现的实验框架。
+    \item 在 GWHD、MTC 和 URC 上验证所提模型，完整配置在三个数据集上均获得最佳性能，证明所提组件的完整组合可实现最强总体计数精度。
+\end{enumerate}
+
+\section{相关工作}
+
+\subsection{基于密度回归的田间作物计数}
+
+自动作物计数已成为农业视觉中的重要研究方向，因为作物器官统计与田间表型分析、农艺监测和产量估计直接相关。针对小麦穗、玉米雄穗和水稻穗的早期及近期研究表明，密度图回归仍是农业计数中的实用方案，尤其适用于目标数量多、局部重叠且与周围植被分离度较低的场景。与直接检测或标量回归相比，密度图方法保留空间分布信息，因此更适合大量小目标同时出现的密集场景。
+
+然而，农业图像中的密度图回归仍具挑战。在真实田间条件下，器官尺度受视角、拍摄高度、生长阶段和遮挡程度影响而变化明显。同时，背景中常包含叶片、茎秆、土壤纹理与阴影，这些模式与目标对象在视觉上相似。在此条件下，密度估计误差不仅体现在局部误分类，非目标区域中的微弱伪响应还可能在积分过程中累积并最终导致显著计数偏差。这一问题促使模型需联合考虑局部响应质量、全局计数一致性与背景抑制。
+
+\subsection{轻量化视觉计数网络}
+
+轻量化深度模型受到越来越多关注，因为许多实际应用不仅要求精度，还要求效率。在农业场景中，高效推理尤为关键，特别是面向大规模图像处理、重复田间巡查和受限算力部署时。然而，降低模型复杂度并非仅仅缩小参数规模。轻量化计数模型仍需具备小目标捕获能力、局部结构细节保持能力以及杂乱背景下的上下文建模能力。若网络过浅或过窄，判别信息损失会直接损害密度图质量。
+
+这种权衡在田间作物计数任务中尤为突出，因为计数误差往往来自细微局部差异，而非大尺度目标外观变化。因此，面向农业计数的轻量网络应在减少冗余计算的同时保留尺度敏感与结构敏感的特征提取能力，这正是 Light-FCCNet 设计的核心出发点。
+
+\subsection{多尺度表征与注意力机制}
+
+多尺度表征长期被认为是视觉计数的关键因素，因为目标尺度在单张图像内部和跨图像之间常显著变化。既有计数与识别模型通过多列结构、特征金字塔或分层特征提取来提升尺度变化鲁棒性。这些方法表明，多尺度上下文有助于在保留小目标局部响应质量的同时，为较大或部分重叠目标保留更广泛结构信息。
+
+注意力机制也被广泛采用以提升特征选择性。空间注意力强调信息性区域，通道注意力突出判别性通道并抑制噪声响应。在农业图像中，注意力尤为有效，因为目标器官常与背景共享纹理和颜色线索。然而，若输入表征较弱，仅依赖注意力并不足够；若缺少注意力引导，仅依赖多尺度表征在融合过程中仍可能传播无关背景响应。基于此，Light-FCCNet 在面向计数的损失约束下结合轻量化金字塔聚合与注意力引导融合，而非依赖单一机制。
+
+\section{材料与方法}
+
+\subsection{Light-FCCNet总体概述}
+
+Light-FCCNet 是用于田间作物计数的轻量化密度图回归网络。其总体设计遵循来源论文中 Light-FCCNet 章节的逻辑，同时在本文中按与最终实现一致的期刊化写法进行组织。模型以农业图像为输入，通过金字塔聚合主干提取轻量化多尺度特征，经由多重注意力融合增强聚合表征，最终预测密度图，并通过空间积分得到作物计数结果。
+
+完整框架由三个协同组件构成。第一部分是轻量化特征金字塔聚合模块，作为在受限计算成本下提取多尺度作物特征的核心结构机制。第二部分是多重注意力模块，通过融合空间与通道注意力增强特征交互并减少特征集成过程中的信息损失。第三部分是 FCC 损失，通过结合像素级密度回归、计数级一致性与结构相似性对模型进行监督。在本文采用的规范消融设计中，这三个组件定义为：
+\begin{itemize}
+    \item \textbf{P1}: 轻量化特征金字塔聚合，
+    \item \textbf{P2}: 多重注意力融合，
+    \item \textbf{P3}: FCC 损失。
+\end{itemize}
+因此，Light-FCCNet 应理解为由两个结构组件（\textbf{P1} 与 \textbf{P2}）和一个优化组件（\textbf{P3}）构成的框架，而非三个并行结构分支。
+
+这一解释非常重要，因为该方法并非由彼此独立分支构成的完全组合式设计，而是渐进式框架：先构建真实基线模型，再加入轻量化金字塔聚合作为主要多尺度增强机制，在其基础上叠加多重注意力机制，最后引入 FCC 损失形成完整优化策略。因此，本文中的规范消融链定义为 \textit{baseline}、\textit{baseline\_p1}、\textit{baseline\_p1\_p2} 和 \textit{full}。
+
+从计数角度看，各组件作用可概括如下：基线路径提供轻量化密度预测参考；金字塔聚合阶段提升尺度变化下的表征能力；注意力阶段细化融合特征并抑制无关响应；FCC 损失则通过同时约束局部密度质量、全局计数一致性与结构相似性，使优化目标与最终计数目标更一致。最终形成的是一个三者协同而非孤立作用的轻量化农业计数框架。
+
+\subsection{数据预处理}
+
+来源论文将随机裁剪作为 Light-FCCNet 的主要预处理与数据增强策略，本文保留该思路。训练过程中，图像被随机裁剪以在不同迭代中生成不同局部视图。该过程提升了数据多样性，并促使网络在变化空间上下文中学习作物特征，而非依赖每张图像的固定视图。对于田间作物计数，这种增强尤其有效，因为同一图像内作物器官也可能表现出不同密度、位置与局部背景。
+
+随机裁剪流程可概括为四步：第一，根据目标训练分辨率定义裁剪尺寸；第二，在图像边界内随机采样合法裁剪起点；第三，按选定区域执行图像裁剪；第四，根据网络输入尺寸要求对裁剪图像进行调整，例如缩放或填充。该策略使模型在不同迭代中能够观察同一训练图像的不同局部区域，从而提升其对位置变化与局部杂乱的鲁棒性。
+
+在当前 Light-FCCNet 流水线中，预处理不限于图像裁剪。由于任务基于点监督密度图回归，几何增强必须与目标标注保持一致。因此，图像变换与点坐标变换联合执行，随后根据变换后的点重新生成密度监督与注意力掩码。该设计保证训练监督与增强后图像在空间上严格对齐。对于 GWHD，框标注通过框中心提取转换为点标注；MTC 与 URC 在训练管线中按点计数数据集处理。
+
+Light-FCCNet 预处理的目的不仅是增加数据多样性，也在于稳定农业场景变化下的密度响应学习。通过持续暴露随机裁剪田间区域并在变换后重建点监督目标，训练过程对固定构图偏置的敏感性降低，更适配密集、杂乱、尺度变化显著的作物计数场景。
+
+\subsection{轻量化特征金字塔聚合模块}
+
+轻量化特征金字塔聚合模块是 Light-FCCNet 的结构核心，对应规范消融中的 \textbf{P1}。其目标是在降低计算成本的同时保持尺度敏感表征。该模块不依赖重型传统卷积堆叠，而是采用轻量卷积块与渐进式金字塔结构生成多尺度特征图。
+
+基础轻量卷积块遵循来源论文中的设计逻辑，并在当前项目中以与代码一致的形式实现。给定输入特征图 $F$，其张量尺寸记为 $H\text{×}W\text{×}C$，通道先被划分为两组，记为 $F_a$ 和 $F_b$。第一分支经逐点卷积得到中间特征 $\hat{F}_a$，再经深度卷积得到更深表征 $F_d$。并行地，$\hat{F}_a$ 与第二分支 $F_b$ 结合以保留浅层信息。两路输出经通道拼接并由 $1\text{×}1$ 投影融合：
+\begin{equation}
+    F_{\mathrm{out}} = \phi\left([\mathrm{DW}(\mathrm{PW}(F_a)),\ \mathrm{PW}(F_a) + F_b]\right),
+\end{equation}
+其中 $\mathrm{PW}(\cdot)$ 表示逐点卷积，$\mathrm{DW}(\cdot)$ 表示深度卷积，$[\cdot,\cdot]$ 表示通道拼接，$\phi(\cdot)$ 表示最终融合投影。该设计在保留浅层与深层局部响应的同时减少冗余。
+
+基于上述轻量块，金字塔聚合模块由四个阶段组成。第一阶段保持原始特征分辨率并提取基础单尺度表征；第二、第三、第四阶段通过深度可分离操作逐步下采样，分别构建原尺度、$\frac{1}{4}$ 尺度、$\frac{1}{16}$ 尺度与 $\frac{1}{64}$ 尺度的特征表征。深层阶段使用残差聚合，使下采样响应与投影输入特征保持连接。若多尺度特征记为 $\{F_1, F_2, F_3, F_4\}$，则金字塔阶段可写为
+\begin{equation}
+    \{F_1, F_2, F_3, F_4\} = \mathcal{P}(I),
+\end{equation}
+其中 $\mathcal{P}(\cdot)$ 表示轻量化金字塔聚合主干，$I$ 为输入图像。
+
+从田间作物计数角度看，该模块作用不仅在于扩大感受野，也在于在尺度变化条件下重平衡密度敏感表征。小器官需要精细局部响应，较大或重叠目标需要更广上下文支撑。通过构建轻量化多尺度特征层级，金字塔聚合模块在控制参数与计算成本的同时，为后续注意力引导融合提供必要表征基础。
+
+\subsection{多重注意力模块}
+
+多重注意力模块对应规范消融中的 \textbf{P2}，定义在 \textbf{P1} 生成的金字塔表征之上。其目标是提升多尺度特征整合质量并抑制由背景纹理引入的无关响应。在当前框架中，只有在存在金字塔特征时注意力阶段才有意义，因此规范消融链将 \textbf{P2} 置于 \textbf{P1} 之后。
+
+该模块第一步是多尺度对齐。每个金字塔特征先经 1×1 映射投影到统一通道维度，再上采样到相同空间尺寸。若四个金字塔特征记为 $\{F_1, F_2, F_3, F_4\}$，则对齐融合表征写为
+\begin{equation}
+    F_{\mathrm{fuse}} = \psi\left([U(P_1(F_1)),\ U(P_2(F_2)),\ U(P_3(F_3)),\ U(P_4(F_4))]\right),
+\end{equation}
+其中 $P_i(\cdot)$ 表示第 $i$ 个尺度的通道投影，$U(\cdot)$ 表示双线性上采样，$\psi(\cdot)$ 表示通道拼接后的卷积融合。
+
+完成对齐与融合后，特征图经空间注意力与通道注意力进一步细化。空间注意力强化上下文定位能力并帮助模型聚焦信息性区域；通道注意力对融合通道进行重加权，使更具判别性的响应主导最终表征。记 $\mathcal{S}(\cdot)$ 为空间注意力变换，$\mathcal{C}(\cdot)$ 为通道注意力变换，则注意力细化特征可写为
+\begin{equation}
+    F_{\mathrm{att}} = \mathcal{C}(\mathcal{S}(F_{\mathrm{fuse}})).
+\end{equation}
+
+除特征细化外，该模块还通过轻量预测头输出辅助注意力图：
+\begin{equation}
+    A = \sigma(h(F_{\mathrm{att}})),
+\end{equation}
+其中 $h(\cdot)$ 为注意力头，$\sigma(\cdot)$ 为 Sigmoid 激活。该图不用于重定义 \textbf{P3}，而是提供空间可解释的辅助响应，并可在需要时用于训练期辅助监督。
+
+因此，多重注意力模块具有双重贡献：其一，通过更细致的对齐与整合降低多尺度融合中的信息损失；其二，通过在空间与通道两个维度重加权融合表征，抑制背景诱导响应。这在农业图像中尤为重要，因为叶片、阴影和土壤纹理均可能干扰作物器官计数。
+
+\subsection{FCC损失}
+
+FCC 损失对应规范消融中的 \textbf{P3}，是将完整模型与结构变体区分开的优化组件。与 \textbf{P1} 和 \textbf{P2} 不同，\textbf{P3} 不是结构分支，而是一种面向计数的损失策略，旨在从三个互补角度提升密度估计质量：像素级回归精度、全局计数一致性和结构相似性。
+
+依据来源论文及最终实现代码，FCC 损失定义为
+\begin{equation}
+    L_{\mathrm{FCC}} = (1 - \alpha)(L_2 + L_C) + \alpha L_S,
+\end{equation}
+其中 $L_2$ 为密度图回归项，$L_C$ 为计数一致性项，$L_S$ 为结构相似性项，$\alpha$ 用于平衡结构监督与其他目标。
+
+密度回归项定义为预测密度图 $D$ 与真实密度图 $D^{\mathrm{gt}}$ 之间的均方误差：
+\begin{equation}
+    L_2 = \frac{1}{N}\sum_{i=1}^{N}\left\| D_i - D_i^{\mathrm{gt}} \right\|_2^2.
+\end{equation}
+计数一致性项比较预测密度积分值与目标计数：
+\begin{equation}
+    L_C = \frac{1}{N}\sum_{i=1}^{N}\left(\sum D_i - C_i^{\mathrm{gt}}\right)^2,
+\end{equation}
+其中 $C_i^{\mathrm{gt}}$ 表示第 $i$ 个样本的真实计数。结构项通过基于结构相似性的损失实现：
+\begin{equation}
+    L_S = 1 - \mathrm{SSIM}(D, D^{\mathrm{gt}}),
+\end{equation}
+其鼓励预测密度图保留目标分布的结构组织，而非仅匹配独立像素值。
+
+在当前实验设计中，关闭 \textbf{P3} 时使用的基线损失仅包含密度回归与计数损失；完整 FCC 损失在此基础上增加结构相似性项。该差异对于解释消融结果至关重要。关闭 \textit{use\_p3\_loss} 时，网络在更简单计数目标下训练；开启后，优化目标对全局结构与密度分布一致性更敏感。因此，\textbf{P3} 应被解释为所提出的损失设计，而非额外结构路径。
+
+\subsection{规范消融语义}
+
+为避免实验解释歧义，本文明确给出规范消融设置。四个主配置如下：
+\begin{itemize}
+    \item \textbf{baseline}: 不含金字塔聚合、不含多重注意力融合、不含 FCC 损失的单尺度轻量计数路径；
+    \item \textbf{baseline\_p1}: baseline + 轻量化特征金字塔聚合；
+    \item \textbf{baseline\_p1\_p2}: baseline + 轻量化特征金字塔聚合 + 多重注意力融合；
+    \item \textbf{full}: baseline + 轻量化特征金字塔聚合 + 多重注意力融合 + FCC 损失。
+\end{itemize}
+
+在该定义下，\textbf{P2} 不被视为脱离金字塔设置的独立模块，因为其作用建立在 \textbf{P1} 生成的对齐多尺度特征之上。同样，\textbf{P3} 被解释为所提出损失函数，而非结构模块。该规范消融链贯穿全文实验部分，并作为分析各组件贡献的主要依据。
+
+\section{实验}
+
+\subsection{数据集}
+
+我们在三个公开田间作物计数数据集上评估 Light-FCCNet：GWHD、MTC 和 URC。这些数据集覆盖不同作物类型，并呈现尺度变化、密度、重叠和背景复杂度的不同组合，适合评估轻量化农业计数模型的鲁棒性。
+
+GWHD 是小麦穗计数基准数据集，在采集条件与目标密度上具有显著变化。该数据集包含由品种差异、光照变化和田间异质性带来的大幅外观变化，因此适用于评估模型能否在复杂小麦场景中保持稳定密度响应。
+
+MTC 是由无人机图像构建的玉米雄穗计数数据集。与小麦穗场景相比，玉米雄穗图像常存在更强冠层干扰和更不规则局部结构。雄穗尺度较小且与周围叶片视觉相似，使准确计数更为困难，尤其对容量受限但需保持细节的轻量网络而言更具挑战。
+
+URC 是在真实田间条件下采集的水稻穗计数数据集。该数据集尤其具有挑战性，因为水稻穗通常分布密集且与周围植被视觉缠绕明显。因此，URC 是检验模型是否能抑制背景诱导密度响应并保持全局计数稳定性的强测试平台。
+
+\subsection{实现细节}
+
+本文所有实验均遵循当前项目中复现的 Light-FCCNet 流水线。模型采用 PyTorch 实现，使用 Adam 优化器，权重衰减为 $1\text{×}10^{-4}$。当前复现配置中，GWHD 初始学习率为 $1\text{×}10^{-5}$，MTC 与 URC 初始学习率为 $5\text{×}10^{-5}$。配置文件中的名义训练轮数为 100 个 epoch，模型选择基于验证集性能。
+
+为匹配不同数据集特性，输入分辨率按数据集设置：GWHD 与 MTC 使用 $256\text{×}256$，URC 使用 $384\text{×}384$。这些设置与当前项目中最终可复现实现保持一致。每个数据集均在同一规范消融链（\textit{baseline}、\textit{baseline\_p1}、\textit{baseline\_p1\_p2}、\textit{full}）下训练，从而以一致、可解释的方式分析轻量化金字塔聚合、多重注意力融合与 FCC 损失的贡献。
+
+复现实现在训练语义上也与方法定义保持一致。具体而言，\textbf{P2} 仅在 \textbf{P1} 激活时启用，\textbf{P3} 被视为损失策略开关而非结构分支。因此，后文报告的消融结果与 Light-FCCNet 的修正后论文语义直接一致。
+
+\subsection{评价指标}
+
+遵循作物计数常见做法，我们采用平均绝对误差（MAE）、均方误差（MSE）和平均绝对百分比误差（MAPE）作为评价指标。设 $C_i$ 和 $\hat{C}_i$ 分别为第 $i$ 张图像的真实计数与预测计数，$N$ 为评估图像总数，则三项指标定义为
+\begin{equation}
+    \mathrm{MAE} = \frac{1}{N}\sum_{i=1}^{N}\left| C_i - \hat{C}_i \right|,
+\end{equation}
+\begin{equation}
+    \mathrm{MSE} = \sqrt{\frac{1}{N}\sum_{i=1}^{N}\left( C_i - \hat{C}_i \right)^2},
+\end{equation}
+以及
+\begin{equation}
+    \mathrm{MAPE} = \frac{100\%}{N}\sum_{i=1}^{N}\left| \frac{\hat{C}_i - C_i}{C_i} \right|.
+\end{equation}
+MAE、MSE 与 MAPE 越低，计数性能越好。
+
+\subsection{消融实验}
+
+Light-FCCNet 在 GWHD、MTC 与 URC 上的规范消融结果如表~\ref{tab:gwhd_ablation}、表~\ref{tab:mtc_ablation} 和表~\ref{tab:urc_ablation} 所示。在三个数据集上，\textit{full} 配置均取得最佳性能。该结果直接支持完整框架的有效性，并表明在当前实现下，轻量化金字塔聚合、多重注意力融合与 FCC 损失的组合优于任何部分配置。
+
+\begin{table}[!htbp]
+    \centering
+    \caption{GWHD 数据集上的规范消融结果。}
+    \label{tab:gwhd_ablation}
+    \tablesize
+    \setlength{\tabcolsep}{6pt}
+    \begin{tabular}{@{}lrrrr@{}}
+        \toprule
+        变体 & Epoch & MAE & MSE & MAPE \\
+        \midrule
+        baseline         & 23 & 16.1940 & 547.8745 & 71.7769 \\
+        baseline\_p1     & 18 & 14.7680 & 554.0414 & 61.1091 \\
+        baseline\_p1\_p2 & 18 & 14.8521 & 603.5613 & 69.2369 \\
+        full             & 89 & \textbf{13.2849} & \textbf{412.0035} & \textbf{56.2905} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{table}[!htbp]
+    \centering
+    \caption{MTC 数据集上的规范消融结果。}
+    \label{tab:mtc_ablation}
+    \tablesize
+    \setlength{\tabcolsep}{6pt}
+    \begin{tabular}{@{}lrrrr@{}}
+        \toprule
+        变体 & Epoch & MAE & MSE & MAPE \\
+        \midrule
+        baseline         & 15 & 24.2398 & 847.9836 & 522.6162 \\
+        baseline\_p1     & 84 & 23.0621 & 788.5193 & 484.6912 \\
+        baseline\_p1\_p2 & 67 & 19.8522 & 618.0701 & 413.0609 \\
+        full             & 74 & \textbf{18.1003} & \textbf{539.5921} & \textbf{308.4518} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{table}[!htbp]
+    \centering
+    \caption{URC 数据集上的规范消融结果。}
+    \label{tab:urc_ablation}
+    \tablesize
+    \setlength{\tabcolsep}{6pt}
+    \begin{tabular}{@{}lrrrr@{}}
+        \toprule
+        变体 & Epoch & MAE & MSE & MAPE \\
+        \midrule
+        baseline         & 96 & 94.5271 & 17598.0156 & 19.0922 \\
+        baseline\_p1     & 44 & 91.1150 & 15529.0537 & 18.1650 \\
+        baseline\_p1\_p2 & 60 & 69.5440 & 7320.5269 & 11.7235 \\
+        full             & 66 & \textbf{61.5534} & \textbf{7079.6597} & \textbf{11.1510} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+从以上结果可得到几点观察。首先，\textbf{P1} 在三个数据集上均稳定优于 baseline，说明轻量化金字塔聚合为田间作物计数提供了更强表征基础。该增益在 GWHD 上较温和，在 MTC 和 URC 上更显著，表明随着场景复杂度和背景干扰增强，多尺度表征的价值更加突出。
+
+其次，\textbf{P2} 在 \textbf{P1} 之上的独立贡献具有数据集依赖性。在 MTC 与 URC 上，从 \textit{baseline\_p1} 到 \textit{baseline\_p1\_p2} 带来明显提升，说明注意力引导融合有助于抑制干扰并保留更具判别性的多尺度响应。然而在 GWHD 上，\textit{baseline\_p1\_p2} 的 MAE 略弱于 \textit{baseline\_p1}。这表明注意力模块并不一定在每个数据集上都产生立即的独立增益，但其作为完整框架的一部分仍具有价值。
+
+第三，在完整框架中 \textbf{P3} 的贡献尤为关键。尽管 \textbf{P3} 并非以独立结构消融形式报告，但 \textit{baseline\_p1\_p2} 与 \textit{full} 的差距清晰体现其作用。完整模型在 GWHD 上将 MAE 从 14.8521 降至 13.2849，在 MTC 上从 19.8522 降至 18.1003，在 URC 上从 69.5440 降至 61.5534。相对 baseline，完整模型 MAE 分别下降约 18.0\%、25.3\% 和 34.9\%。这些结果表明 FCC 损失在将更优特征表征转化为更高最终计数精度方面发挥了重要作用。
+
+总体而言，消融实验支持对 Light-FCCNet 的一致性解释：轻量化金字塔聚合提供关键多尺度基础，多重注意力融合在复杂背景下进一步细化表征，FCC 损失稳定最终优化目标。三者组合在三个数据集上均取得最优总体结果。
+
+\subsection{与现有方法对比}
+
+为保留最终稿件结构，本文同时设置独立的跨方法对比小节。该部分应保留在论文中，因为其对于定位 Light-FCCNet 相对既有计数模型的优势（尤其在计算效率与计数精度方面）非常重要。当前起草阶段中，下述文献对比数值为 \textbf{仅用于论文结构占位的临时值}，投稿前必须替换为经核验的公开报告结果。为避免占位表影响版面，以下表格仅保留简洁题注，临时说明统一放在本段文字中给出。
+
+\begin{table}[!htbp]
+    \centering
+    \caption{模型复杂度对比（临时占位）。}
+    \label{tab:complexity_placeholder}
+    \tablesize
+    \setlength{\tabcolsep}{8pt}
+    \begin{tabular}{@{}lcc@{}}
+        \toprule
+        方法 & 参数量 & FLOPs \\
+        \midrule
+        CMTL                & 15.11M & 243.80G \\
+        CSRNet              & 16.26M & 857.84G \\
+        CAN                 & 2.36M  & 908.05G \\
+        DM-Count            & 15.85M & 853.70G \\
+        M-SegNet            & 15.56M & 749.74G \\
+        SASNet              & 30.39M & 1.84T \\
+        Light-FCCNet (Ours) & \textbf{0.73M} & \textbf{125.53G} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{table}[!htbp]
+    \centering
+    \caption{GWHD 数据集上的方法对比（临时占位）。}
+    \label{tab:gwhd_placeholder}
+    \tablesize
+    \setlength{\tabcolsep}{8pt}
+    \begin{tabular}{@{}lc@{}}
+        \toprule
+        方法 & MAE \\
+        \midrule
+        CMTL                & 15.80 \\
+        CSRNet              & 15.10 \\
+        CAN                 & 14.60 \\
+        DM-Count            & 14.30 \\
+        M-SegNet            & 13.90 \\
+        SASNet              & 13.60 \\
+        Light-FCCNet (Ours) & \textbf{13.28} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{table}[!htbp]
+    \centering
+    \caption{MTC 数据集上的方法对比（临时占位）。}
+    \label{tab:mtc_placeholder}
+    \tablesize
+    \setlength{\tabcolsep}{8pt}
+    \begin{tabular}{@{}lc@{}}
+        \toprule
+        方法 & MAE \\
+        \midrule
+        CMTL                & 24.60 \\
+        CSRNet              & 22.80 \\
+        CAN                 & 21.90 \\
+        DM-Count            & 20.70 \\
+        M-SegNet            & 19.60 \\
+        SASNet              & 18.90 \\
+        Light-FCCNet (Ours) & \textbf{18.10} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{table}[!htbp]
+    \centering
+    \caption{URC 数据集上的方法对比（临时占位）。}
+    \label{tab:urc_placeholder}
+    \tablesize
+    \setlength{\tabcolsep}{8pt}
+    \begin{tabular}{@{}lc@{}}
+        \toprule
+        方法 & MAE \\
+        \midrule
+        CMTL                & 79.40 \\
+        CSRNet              & 76.20 \\
+        CAN                 & 73.80 \\
+        DM-Count            & 71.50 \\
+        M-SegNet            & 69.80 \\
+        SASNet              & 66.40 \\
+        Light-FCCNet (Ours) & \textbf{61.55} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+在当前复现的规范设置下，Light-FCCNet 已通过消融实验展现出充分内部证据。该小节最终版本应在此基础上，将完整模型与代表性作物计数或密度回归基线在一致数据集与指标协议下进行比较。目前，上述表格作为写作占位内容，用于保持论文完整结构。一旦完成文献数值核验，本小节可在不改变整体组织的前提下转为正式对比分析。
+
+\section{讨论}
+
+对 Light-FCCNet 的讨论重点应是解释完整框架为何在异构农业场景中有效，而非重复罗列表格数值。当前复现实验在 GWHD、MTC 和 URC 上已呈现一致的高层规律：完整模型在三个数据集上均为最优配置，但中间组件增益并非完全一致。这是重要发现而非缺陷，说明所提框架应被理解为一个协同计数系统，各模块分别对应误差形成过程中的不同环节。
+
+\subsection{轻量化金字塔聚合为何有效}
+
+轻量化特征金字塔聚合模块的首要作用是在不依赖重型编码器的前提下提升尺度变化条件下的表征质量。在田间作物计数中，同一图像可能因视角变化、生长阶段、拍摄距离和局部重叠而包含不同表观尺度目标。若表征偏向狭窄感受野范围，小器官可能出现弱局部响应，而较大或聚簇目标可能被过度平滑。消融结果显示，引入 \textbf{P1} 后三个数据集均优于 baseline，说明轻量化多尺度聚合可为密度估计提供更强基础。
+
+该改进的意义还在于其在轻量化目标下实现。\textbf{P1} 的价值不仅是引入更多尺度，更在于以有限参数和计算增长实现这一点。对于实用农业计数模型，这种平衡至关重要：部署侧受益于模型规模降低，而计数精度仍依赖尺度感知局部响应的保留。结果表明，所提金字塔聚合模块有效改善了这一权衡。
+
+\subsection{多重注意力效应为何具有数据依赖性}
+
+多重注意力模块的贡献需要谨慎解释。在 MTC 和 URC 上，在 \textbf{P1} 基础上加入 \textbf{P2} 能带来明显增益，这与“注意力引导融合有助于抑制复杂冠层结构与杂乱背景干扰”的直觉一致。然而在 GWHD 上，单独考察时 \textit{baseline\_p1\_p2} 略弱于 \textit{baseline\_p1}。这意味着注意力不应被描述为对所有数据分布都普适占优的独立改进。
+
+即便如此，结果并不意味着 \textbf{P2} 不必要。在 GWHD 上，\textbf{P2} 与 \textbf{P3} 同时启用时完整框架仍最优，说明即使独立效应有限，注意力仍提供了有价值的表征细化。合理解释是：\textbf{P2} 提升了融合表征的判别性，但其收益在优化目标与结构密度质量（FCC 损失）对齐时才能更充分释放。从这一意义上，\textbf{P2} 是一个支持性模块，其价值部分取决于训练目标，部分取决于数据集统计特性。
+
+\subsection{FCC损失为何是关键组件}
+
+消融结果表明 \textbf{P3} 是最终性能提升的重要来源。从 \textit{baseline\_p1\_p2} 到 \textit{full} 在三个数据集上均有清晰提升，且 URC 降幅最大。这一现象说明仅有更强特征提取并不足以达到最优计数性能。优化目标还需鼓励模型同时保持像素级密度精度、全局计数一致性与预测密度图的结构组织质量。
+
+这一作用在农业场景中尤为关键，因为计数误差常由大量微小局部偏差在密度积分后累积形成。FCC 损失通过将密度回归、计数监督和结构相似性统一到单一目标中，针对性缓解该问题。因此，最终模型更能将改进后的特征表征转化为更稳定的最终计数。三个不同数据集上的一致增益说明 \textbf{P3} 并非装饰项，而是 Light-FCCNet 设计中的核心组成。
+
+\subsection{对田间作物计数的启示}
+
+综合结果支持对 Light-FCCNet 的明确解释：该方法既不是依赖暴力容量的重型计数网络，也不是由无关模块拼接而成的松散集合，而是一种将多尺度表征、注意力细化与面向计数监督对齐到田间图像实际特性的轻量化计数框架。这种组合尤其适用于农业场景，因为此类图像常同时存在目标重叠、尺度变化、遮挡以及与目标器官视觉相似的背景模式。
+
+另一个重要启示是方法论层面的。本文采用的修正后规范消融链比纯组合式模块开关更忠实于方法逻辑。通过将 \textbf{P1} 定义为金字塔聚合、\textbf{P2} 定义为建立在金字塔表征之上的注意力机制、\textbf{P3} 定义为 FCC 损失，实验叙事与实际方法机制实现了对齐，从而提升了结果可解释性与论文创新主张的可信度。
+
+\section{结论}
+
+本文将 Light-FCCNet 提出为面向田间作物计数的轻量化密度回归框架。该方法由三个协同组件组成：用于尺度感知表征的轻量化特征金字塔聚合模块、用于多尺度融合细化的多重注意力模块，以及面向计数优化的 FCC 损失。不同于任意组合的消融分支集合，这些组件构成了结构表征与优化策略联合设计的渐进式计数框架。
+
+在 GWHD、MTC 和 URC 上的实验表明，修正后的规范完整模型在主消融设置中持续取得最佳性能。结果显示，轻量化金字塔聚合提供更强多尺度基础，多重注意力融合在复杂背景下带来额外表征细化，FCC 损失则是将这些表征增益转化为更高最终计数精度的关键。上述发现验证了所提方法的有效性，并确认了 \textbf{P1}、\textbf{P2} 与 \textbf{P3} 论文语义解释的实验合理性。
+
+总体而言，Light-FCCNet 在农业图像中实现了模型紧凑性与计数精度之间的实用平衡。未来工作可将该框架扩展到更多作物计数基准、更严格的文献级对比协议，以及更丰富的定性分析（如密度图可视化与计数一致性图）。另一个有价值方向是检验该设计原则在更具挑战的跨域或跨分辨率部署场景中的有效性。
+
+\section*{CRediT作者贡献声明}
+\noindent
+\begin{tabularx}{\linewidth}{@{}p{3cm}X@{}}
+    Yuxiang Liu: & 概念设计、方法设计、软件实现、数据整理、实验执行、形式化分析、可视化以及初稿撰写。 \\
+    Rongyue Wei: & 监督、方法审阅、有效性验证以及论文审阅与修改。 \\
+    Fuquan Zhang: & 监督、方法审阅、有效性验证以及论文审阅与修改。 \\
+\end{tabularx}
+
+\section*{基金资助}
+\noindent 本研究未获得来自公共、商业或非营利资助机构的任何专项基金支持。
+
+\section*{利益冲突声明}
+\noindent 作者声明不存在任何可能对本文工作产生影响的已知竞争性财务利益或个人关系。
+
+\section*{数据可用性声明}
+\noindent 本研究所用数据集获取方式如下：\\
+GWHD：Global Wheat Head Detection 数据集，\url{https://www.global-wheat.com/}。\\
+MTC：Maize Tassels Counting 数据集，\url{https://github.com/poppinace/mtc}。\\
+URC：UAV Rice Counting 数据集。可向原作者合理申请获取，或在期刊要求时提供。
+
+\section*{写作过程中生成式AI与AI辅助技术声明}
+\noindent 在本文准备过程中，作者使用 OpenAI Codex 进行草稿支持、结构修订与语言编辑辅助。使用该工具后，作者已对内容进行了必要审阅与修改，并对论文最终内容承担全部责任。
+
+\bibliographystyle{unsrtnat}
+\bibliography{references}
+
+\end{document}

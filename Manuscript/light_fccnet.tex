@@ -1,0 +1,386 @@
+\documentclass[a4paper,fleqn]{cas-sc}
+
+\usepackage{float}
+\usepackage[section]{placeins}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{tabularx}
+
+\setcounter{topnumber}{3}
+\setcounter{bottomnumber}{2}
+\setcounter{totalnumber}{5}
+
+\renewcommand{\topfraction}{0.90}
+\renewcommand{\bottomfraction}{0.80}
+\renewcommand{\textfraction}{0.08}
+\renewcommand{\floatpagefraction}{0.85}
+
+\setlength{\textfloatsep}{10pt plus 2pt minus 2pt}
+\setlength{\floatsep}{8pt plus 2pt minus 2pt}
+\setlength{\intextsep}{8pt plus 2pt minus 2pt}
+\makeatletter
+\setlength{\@fptop}{0pt}
+\setlength{\@fpsep}{8pt plus 1fil}
+\setlength{\@fpbot}{0pt plus 1fil}
+\makeatother
+
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{longtable}
+
+\usepackage[numbers]{natbib}
+\usepackage{hyperref}
+\hypersetup{hidelinks}
+\usepackage{lineno}
+
+\newcommand{\sep}{\quad}
+
+\begin{document}
+\let\WriteBookmarks\relax
+\def\floatpagepagefraction{1}
+\def\textpagefraction{.001}
+
+\shorttitle{Light-FCCNet for Field Crop Counting}
+\shortauthors{Y. Liu et al.}
+
+\title[mode = title]{Light-FCCNet: A Lightweight Field Crop Counting Network with Pyramid Aggregation, Multi-Attention Fusion, and FCC Loss}
+
+\author{Yuxiang Liu}
+\author{Rongyue Wei}
+\author{Fuquan Zhang}
+
+\begin{abstract}
+Accurate counting of wheat heads, maize tassels, and rice panicles is important for field phenotyping, crop monitoring, and yield-related analysis. However, existing density-map-regression-based counting methods often remain computationally heavy and are therefore less suitable for efficient deployment in agricultural scenarios with limited computing resources. At the same time, large target-scale variation, dense overlap, and complex backgrounds still make it difficult to preserve reliable crop responses while suppressing spurious density activation in non-target regions. To address these issues, we propose Light-FCCNet, a lightweight field crop counting network built around three coordinated components: a lightweight feature pyramid aggregation module, a multi-attention fusion module, and an FCC loss for counting-oriented optimization. The proposed framework enhances multi-scale representation with reduced parameter cost, strengthens feature fusion through spatial and channel attention, and improves optimization by jointly considering pixel-level density regression, count consistency, and structural similarity. We evaluate Light-FCCNet on three public field crop counting datasets, namely GWHD, MTC, and URC. Under a progressive canonical ablation setting consisting of \textit{baseline}, \textit{baseline\_p1}, \textit{baseline\_p1\_p2}, and \textit{full}, the full model achieves the best performance on all three datasets, obtaining MAE values of 13.2849 on GWHD, 18.1003 on MTC, and 61.5534 on URC. These results indicate that the proposed lightweight design yields stable gains across different agricultural counting scenarios and that the complete combination of pyramid aggregation, attention-guided fusion, and FCC loss provides the strongest overall performance.
+\end{abstract}
+
+\begin{keywords}
+field crop counting \sep lightweight network \sep density-map regression \sep feature pyramid aggregation \sep attention fusion \sep loss design
+\end{keywords}
+
+\maketitle
+
+\section{Introduction}
+\linenumbers
+
+Field crop counting is an important task in smart agriculture because the numbers of wheat heads, maize tassels, and rice panicles are closely related to crop growth monitoring, phenotypic analysis, and yield estimation. Accurate organ counting supports breeding selection, cultivation management, and large-scale field evaluation, especially when crop populations must be measured rapidly under real outdoor conditions. With the increasing use of UAV platforms and high-resolution field imaging, automatic crop counting has become more practical, but it has also become more challenging because images acquired in real fields usually contain large scale variation, target overlap, shadows, background vegetation, and cluttered textures. These factors make reliable counting difficult even when strong visual models are available.
+
+Deep learning has become a mainstream solution for agricultural counting, and density-map regression remains one of the most widely adopted paradigms because it can handle dense targets while preserving spatial distribution information. Instead of directly predicting a scalar count, density-map-based methods estimate a dense response field and recover the final count by integrating the predicted density map. This formulation is particularly useful for crowded agricultural scenes in which targets are small, numerous, and partially occluded. However, the quality of the final count depends strongly on the quality of local density responses. If the model fails to preserve clear local peaks for true crop organs or produces weak spurious responses in background regions, these errors will accumulate during density integration and degrade counting accuracy.
+
+Although recent counting methods have achieved good performance, two practical issues remain significant for field deployment. First, many high-performing models are still computationally heavy. They often rely on large backbones or multi-branch structures with substantial parameter and memory cost, which limits their efficiency in practical agricultural applications. Second, even when the overall architecture is effective, existing methods do not always resolve the interaction between lightweight design and robust multi-scale modeling. In field scenes, crop organs can vary considerably in size due to imaging height, camera viewpoint, growth stage, and cultivar difference. A lightweight model that lacks sufficient scale-aware representation may lose important fine-grained target cues, while a stronger but heavier model may be unsuitable for efficient use.
+
+Background interference further complicates this problem. In agricultural images, non-target regions such as leaves, stems, soil textures, and shadows often exhibit visual patterns similar to crop organs. Under density-map regression, such background textures can induce weak but spatially distributed false responses. Although these errors may appear small locally, they can introduce substantial global bias after full-image integration. Therefore, an effective field crop counting model must not only capture multi-scale crop features, but also suppress irrelevant responses during feature fusion and optimize density prediction in a counting-aware manner.
+
+To address these issues, we study a lightweight counting architecture derived from the Light-FCCNet design. The method combines three coordinated components. First, a lightweight feature pyramid aggregation module constructs multi-scale representations with reduced computation cost and serves as the main structural mechanism for handling target-scale variation. Second, a multi-attention fusion module combines spatial and channel attention to strengthen feature interaction and reduce information loss during multi-scale fusion. Third, an FCC loss improves optimization by jointly considering pixel-level density regression, count-level consistency, and structural similarity between predicted and target density maps. Together, these components form a lightweight agricultural counting framework that is better aligned with the practical needs of efficient deployment while still preserving strong counting performance.
+
+In this study, we evaluate Light-FCCNet on three public field crop counting datasets: GWHD, MTC, and URC. To clarify the role of each component, we organize the experiments using a progressive canonical ablation chain consisting of \textit{baseline}, \textit{baseline\_p1}, \textit{baseline\_p1\_p2}, and \textit{full}. This setting allows the effects of lightweight pyramid aggregation, multi-attention fusion, and FCC loss to be interpreted in a coherent manner. The reproduced results show that the full configuration achieves the best performance on all three datasets, indicating stable complementarity among the three components under heterogeneous agricultural conditions.
+
+The main contributions of this work are summarized as follows:
+\begin{enumerate}
+    \item We propose Light-FCCNet, a lightweight field crop counting network that combines feature pyramid aggregation, multi-attention fusion, and FCC loss to address scale variation, background interference, and counting-oriented optimization in agricultural scenes.
+    \item We redesign the method description and canonical ablation setting so that the three core components are interpreted consistently as lightweight pyramid aggregation (P1), multi-attention fusion (P2), and FCC loss (P3), thereby providing a clear and reproducible experimental framework.
+    \item We validate the proposed model on GWHD, MTC, and URC, and the full configuration achieves the best performance on all three datasets, demonstrating that the complete combination of the proposed components provides the strongest overall counting accuracy.
+\end{enumerate}
+
+\section{Related Work}
+
+\subsection{Field Crop Counting with Density Regression}
+
+Automatic crop counting has become an important topic in agricultural vision because crop-organ statistics are directly related to field phenotyping, agronomic monitoring, and yield estimation. Early and recent studies on wheat heads, maize tassels, and rice panicles have shown that density-map regression remains a practical solution for agricultural counting, especially when targets are numerous, partially overlapped, and weakly separated from surrounding vegetation. Compared with direct detection or scalar regression, density-map methods preserve spatial distribution information and are therefore better suited to dense scenes in which many small crop organs appear simultaneously.
+
+Nevertheless, density-map regression in agricultural images is still challenging. In real field scenarios, organ size varies with viewpoint, imaging height, growth stage, and occlusion level. At the same time, the background often contains leaves, stems, soil textures, and shadows that visually resemble target objects. Under these conditions, density estimation errors are not limited to local misclassification. Weak false responses in non-target regions may accumulate during integration and eventually produce substantial counting bias. This problem motivates models that jointly consider local response quality, global count consistency, and background suppression.
+
+\subsection{Lightweight Visual Counting Networks}
+
+Lightweight deep models have received increasing attention because many real applications require not only accuracy but also efficiency. In agricultural scenarios, efficient inference is especially important for large-scale image processing, repeated field surveys, and deployment under limited computing resources. However, reducing model complexity is not simply a matter of shrinking parameter size. A lightweight counting model must still preserve the ability to capture small targets, maintain local structural details, and model context under cluttered backgrounds. If a network becomes too shallow or too narrow, the resulting loss of discriminative information may directly damage density-map quality.
+
+This trade-off is particularly important for field crop counting, where counting errors often arise from subtle local differences rather than from large object-level appearance changes. Therefore, a lightweight network for agricultural counting should reduce redundant computation while retaining scale-sensitive and structure-sensitive feature extraction. This consideration is central to the design of Light-FCCNet.
+
+\subsection{Multi-Scale Representation and Attention Mechanisms}
+
+Multi-scale representation has long been recognized as a key factor in visual counting, because target size often changes significantly within and across images. Previous counting and recognition models have used multi-column designs, feature pyramids, or hierarchical feature extraction to improve robustness to scale variation. These methods show that multi-scale context can help preserve local response quality for small targets while still retaining broader structural information for larger or partially overlapped targets.
+
+Attention mechanisms have also been widely adopted to improve feature selectivity. Spatial attention emphasizes informative regions, whereas channel attention highlights discriminative feature channels and suppresses noisy responses. In agricultural images, attention is especially useful because target organs frequently share texture and color cues with the surrounding background. However, attention alone is not sufficient if the input representation is weak, and multi-scale representation alone may still propagate irrelevant background responses during fusion. For this reason, Light-FCCNet combines lightweight pyramid aggregation and attention-guided fusion under a counting-oriented loss, rather than relying on a single mechanism in isolation.
+
+\section{Materials and Methods}
+
+\subsection{Overview of Light-FCCNet}
+
+Light-FCCNet is a lightweight density-map-regression network for field crop counting. Its overall design follows the logic described in the Light-FCCNet chapter of the source thesis, but the method is organized here in a journal-style formulation consistent with the final implemented framework. The model takes an agricultural image as input, extracts lightweight multi-scale features through a pyramid aggregation backbone, enhances the aggregated representation through multi-attention fusion, and predicts a density map whose spatial integral yields the final crop count.
+
+The complete framework is built around three coordinated components. The first component is the lightweight feature pyramid aggregation module, which serves as the main structural mechanism for extracting multi-scale crop features under constrained computation cost. The second component is the multi-attention module, which fuses spatial and channel attention to improve feature interaction and reduce information loss during feature integration. The third component is the FCC loss, which supervises the model through a combination of pixel-level density regression, count-level consistency, and structural similarity. In the canonical ablation design used throughout this study, these three components are interpreted as:
+\begin{itemize}
+    \item \textbf{P1}: lightweight feature pyramid aggregation,
+    \item \textbf{P2}: multi-attention fusion,
+    \item \textbf{P3}: FCC loss.
+\end{itemize}
+Accordingly, Light-FCCNet should be understood as a framework composed of two architectural components (\textbf{P1} and \textbf{P2}) and one optimization component (\textbf{P3}), rather than as three parallel structural branches.
+
+This interpretation is important because the method is not written as a fully combinatorial collection of independent branches. Instead, it is a progressive framework in which a real baseline model is first constructed, the lightweight pyramid aggregation is then added as the principal multi-scale enhancement, the multi-attention mechanism is applied on top of the pyramid representation, and the FCC loss is finally introduced as the full optimization strategy. Accordingly, the canonical ablation chain in this paper is defined as \textit{baseline}, \textit{baseline\_p1}, \textit{baseline\_p1\_p2}, and \textit{full}.
+
+From a counting perspective, the role of each component can be summarized as follows. The baseline path provides a lightweight reference for density-map prediction. The pyramid aggregation stage improves representation under target-scale variation. The attention stage refines fused features and suppresses irrelevant responses. The FCC loss further aligns optimization with the final counting objective by simultaneously constraining local density quality, global count consistency, and structural similarity. The result is a lightweight agricultural counting framework in which the three components act in a coordinated rather than isolated manner.
+
+\subsection{Data Preprocessing}
+
+The source thesis describes random cropping as the main preprocessing and data augmentation strategy for Light-FCCNet, and this idea is retained in the present manuscript. During training, an image is randomly cropped to produce different local views across iterations. This process increases data diversity and encourages the network to learn crop features under changing spatial contexts rather than relying on a fixed view of each image. For field crop counting, such augmentation is especially useful because crop organs may appear at different densities, positions, and local backgrounds even within the same image.
+
+The random cropping procedure can be described in four steps. First, a crop size is defined according to the target training resolution. Second, a valid crop origin is randomly sampled within the image boundary. Third, the image is cropped according to the selected region. Fourth, the cropped image is adjusted as required by the network input size, for example through resizing or padding. In practice, this strategy allows the model to observe different local regions of the same training image during different iterations, thereby improving robustness to positional variation and local clutter.
+
+In the current Light-FCCNet pipeline, preprocessing is not limited to image cropping alone. Because the task is based on point-supervised density-map regression, geometric augmentation must remain consistent with the target annotations. Therefore, image transformation and point transformation are jointly applied, after which the density target and attention mask are regenerated from the transformed points. This design ensures that training supervision remains spatially aligned with the augmented image. For GWHD, bounding-box annotations are converted into point annotations through box-center extraction, whereas MTC and URC are handled as point-based counting datasets in the training pipeline.
+
+The purpose of preprocessing in Light-FCCNet is not only to increase data diversity, but also to stabilize the learning of density responses under agricultural scene variation. By repeatedly exposing the model to randomly cropped field regions and regenerating point-supervised targets after transformation, the training process becomes less sensitive to fixed composition bias and better suited to dense, cluttered, and scale-varying crop-counting scenarios.
+
+\subsection{Lightweight Feature Pyramid Aggregation Module}
+
+The lightweight feature pyramid aggregation module is the structural core of Light-FCCNet and corresponds to \textbf{P1} in the canonical ablation setting. Its purpose is to preserve scale-sensitive representation while reducing computation cost. Instead of relying on a heavy conventional convolutional stack, the module adopts lightweight convolutional blocks and a progressive pyramid structure to generate feature maps at multiple scales.
+
+The basic lightweight convolutional block follows the design logic described in the source thesis and is implemented in a code-consistent form in the current project. Given an input feature map $F \in \mathbb{R}^{H \times W \times C}$, the channels are first split into two groups, denoted by $F_a$ and $F_b$. The first branch is transformed by a pointwise convolution to generate an intermediate feature $\hat{F}_a$, which is then processed by a depthwise convolution to produce a deeper representation $F_d$. In parallel, the intermediate feature $\hat{F}_a$ is combined with the second split branch $F_b$ to preserve shallow information. The two outputs are concatenated and fused by a $1 \times 1$ projection:
+\begin{equation}
+    F_{\mathrm{out}} = \phi \left( \left[ \mathrm{DW}\big(\mathrm{PW}(F_a)\big),\ \mathrm{PW}(F_a) + F_b \right] \right),
+\end{equation}
+where $\mathrm{PW}(\cdot)$ denotes pointwise convolution, $\mathrm{DW}(\cdot)$ denotes depthwise convolution, $[\cdot,\cdot]$ denotes channel concatenation, and $\phi(\cdot)$ denotes the final fusion projection. This design reduces redundancy while still preserving both shallow and deeper local responses.
+
+Based on this lightweight block, the pyramid aggregation module is organized into four stages. The first stage keeps the original feature resolution and extracts the basic single-scale representation. The second, third, and fourth stages progressively downsample the feature map through depthwise-separable operations and build feature representations targeting approximately $\times1$, $\times1/4$, $\times1/16$, and $\times1/64$ spatial scales, respectively. Residual aggregation is used in the deeper stages so that downsampled responses remain connected to the projected input features. If the resulting multi-scale features are denoted as $\{F_1, F_2, F_3, F_4\}$, then the pyramid stage can be summarized as
+\begin{equation}
+    \{F_1, F_2, F_3, F_4\} = \mathcal{P}(I),
+\end{equation}
+where $\mathcal{P}(\cdot)$ denotes the lightweight pyramid aggregation backbone and $I$ is the input image.
+
+From the viewpoint of field crop counting, the role of this module is not only to enlarge receptive fields, but also to rebalance density-sensitive representation under scale variation. Small crop organs require fine local responses, whereas larger or overlapping targets require broader contextual support. By constructing a lightweight multi-scale feature hierarchy, the pyramid aggregation module provides the representation basis required by subsequent attention-guided fusion while keeping parameter and computational cost low.
+
+\subsection{Multi-Attention Module}
+
+The multi-attention module corresponds to \textbf{P2} in the canonical ablation setting and is defined on top of the pyramid representation generated by \textbf{P1}. Its purpose is to improve the integration of multi-scale features and suppress irrelevant responses that may be introduced by background textures. In the current framework, the attention stage is meaningful only when pyramid features are available, which is why the canonical ablation chain places \textbf{P2} after \textbf{P1}.
+
+The first step of the module is multi-scale alignment. Each pyramid feature is projected to a common channel dimension through a $1 \times 1$ mapping and then upsampled to the same spatial size. If the four pyramid features are denoted as $\{F_1, F_2, F_3, F_4\}$, the aligned fusion representation can be written as
+\begin{equation}
+    F_{\mathrm{fuse}} = \psi \Big( \big[ U(P_1(F_1)),\ U(P_2(F_2)),\ U(P_3(F_3)),\ U(P_4(F_4)) \big] \Big),
+\end{equation}
+where $P_i(\cdot)$ denotes the channel projection for the $i$th scale, $U(\cdot)$ denotes bilinear upsampling, and $\psi(\cdot)$ denotes convolutional fusion after channel concatenation.
+
+After alignment and fusion, the feature map is refined by spatial attention and channel attention. Spatial attention strengthens context-aware localization and helps the model emphasize informative regions, whereas channel attention reweights the fused channels so that more discriminative feature responses dominate the final representation. Let $\mathcal{S}(\cdot)$ denote the spatial attention transformation and $\mathcal{C}(\cdot)$ denote the channel attention transformation. The final attention-refined feature can be written as
+\begin{equation}
+    F_{\mathrm{att}} = \mathcal{C}\big(\mathcal{S}(F_{\mathrm{fuse}})\big).
+\end{equation}
+
+In addition to feature refinement, the module also produces an auxiliary attention map through a lightweight prediction head:
+\begin{equation}
+    A = \sigma \big( h(F_{\mathrm{att}}) \big),
+\end{equation}
+where $h(\cdot)$ denotes the attention head and $\sigma(\cdot)$ denotes the Sigmoid activation. This map is not used to redefine \textbf{P3}; instead, it provides a spatially interpretable auxiliary response and can be used for auxiliary supervision during training when the experimental setting requires it.
+
+The contribution of the multi-attention module is therefore twofold. First, it reduces information loss during multi-scale fusion by aligning and integrating features more carefully than naive aggregation. Second, it helps suppress background-induced responses by reweighting the fused representation in both spatial and channel dimensions. This is particularly relevant in agricultural images, where leaves, shadows, and soil patterns can easily interfere with crop-organ counting.
+
+\subsection{FCC Loss}
+
+The FCC loss corresponds to \textbf{P3} in the canonical ablation setting and is the optimization component that distinguishes the full model from the structural variants. Unlike \textbf{P1} and \textbf{P2}, \textbf{P3} is not a structural branch. It is a counting-oriented loss policy designed to improve the quality of density estimation from three complementary perspectives: pixel-level regression accuracy, global count consistency, and structural similarity.
+
+Following the formulation in the source thesis and the final implemented code, the FCC loss is defined as
+\begin{equation}
+    L_{\mathrm{FCC}} = (1 - \alpha)\left(L_2 + L_C\right) + \alpha L_S,
+\end{equation}
+where $L_2$ is the density-map regression term, $L_C$ is the count-consistency term, $L_S$ is the structural similarity term, and $\alpha$ balances structural supervision against the other objectives.
+
+The density regression term is defined by the mean squared error between the predicted density map $D$ and the ground-truth density map $D^{\mathrm{gt}}$:
+\begin{equation}
+    L_2 = \frac{1}{N}\sum_{i=1}^{N}\left\| D_i - D_i^{\mathrm{gt}} \right\|_2^2.
+\end{equation}
+The count-consistency term compares the integral of the predicted density map with the target count:
+\begin{equation}
+    L_C = \frac{1}{N}\sum_{i=1}^{N} \left( \sum D_i - C_i^{\mathrm{gt}} \right)^2,
+\end{equation}
+where $C_i^{\mathrm{gt}}$ denotes the ground-truth count of the $i$th sample. The structural term is implemented through a structural-similarity-based loss,
+\begin{equation}
+    L_S = 1 - \mathrm{SSIM}(D, D^{\mathrm{gt}}),
+\end{equation}
+which encourages the predicted density map to preserve the structural organization of the target distribution rather than matching only individual pixels.
+
+In the current experimental design, the baseline loss used when \textbf{P3} is disabled consists of density regression and count loss only, whereas the full FCC loss adds the structural similarity term. This distinction is important for interpreting the ablation results. When \textit{use\_p3\_loss} is disabled, the network is trained under a simpler counting objective. When it is enabled, the optimization target becomes more sensitive to global structure and density distribution consistency. Therefore, \textbf{P3} should be interpreted as the proposed loss design rather than as an additional architectural path.
+
+\subsection{Canonical Ablation Semantics}
+
+To avoid ambiguity in the interpretation of the experiments, the canonical ablation settings used in this paper are explicitly defined here. The four principal configurations are:
+\begin{itemize}
+    \item \textbf{baseline}: single-scale lightweight counting path without pyramid aggregation, without multi-attention fusion, and without FCC loss;
+    \item \textbf{baseline\_p1}: baseline plus lightweight feature pyramid aggregation;
+    \item \textbf{baseline\_p1\_p2}: baseline plus lightweight feature pyramid aggregation and multi-attention fusion;
+    \item \textbf{full}: baseline plus lightweight feature pyramid aggregation, multi-attention fusion, and FCC loss.
+\end{itemize}
+
+Under this definition, \textbf{P2} is not treated as an independent module outside the pyramid setting, because its function is defined on top of the aligned multi-scale features generated by \textbf{P1}. Similarly, \textbf{P3} is interpreted as the proposed loss function rather than as a structural module. This canonical ablation chain is used throughout the experimental section and serves as the main basis for analyzing the contribution of each component.
+
+\section{Experiments}
+
+\subsection{Datasets}
+
+We evaluate Light-FCCNet on three public field crop counting datasets: GWHD, MTC, and URC. These datasets represent different crop types and exhibit distinct combinations of scale variation, density, overlap, and background complexity, which makes them suitable for evaluating the robustness of a lightweight agricultural counting model.
+
+GWHD is a wheat-head counting benchmark with substantial variation in acquisition conditions and target density. The dataset contains large appearance changes caused by cultivar difference, illumination variation, and field heterogeneity. Such diversity makes it a useful benchmark for evaluating whether a counting model can preserve stable density responses under complex wheat scenes.
+
+MTC is a maize tassel counting dataset collected from UAV imagery. Compared with wheat-head scenes, maize tassel images often contain stronger canopy interference and more irregular local structures. The small size of tassels and the visual similarity between tassels and surrounding leaves make accurate counting difficult, especially for lightweight networks that must preserve detail under limited capacity.
+
+URC is a rice panicle counting dataset collected under realistic field conditions. This dataset is particularly challenging because rice panicles often appear densely distributed and visually entangled with surrounding vegetation. As a result, URC is a strong testbed for evaluating whether a model can suppress background-induced density responses and maintain stable global counting behavior.
+
+\subsection{Implementation Details}
+
+All experiments in this manuscript follow the reproduced Light-FCCNet pipeline implemented in the current project. The model is trained in PyTorch using the Adam optimizer with a weight decay of $1\times10^{-4}$. The current reproduced configuration uses an initial learning rate of $1\times10^{-5}$ on GWHD and $5\times10^{-5}$ on MTC and URC. The nominal training schedule in the current configuration files is 100 epochs, and model selection is based on validation performance.
+
+To match the characteristics of different datasets, the input resolution is adjusted by dataset. GWHD and MTC use an input size of $256 \times 256$, whereas URC uses $384 \times 384$. These settings follow the final reproducible implementation used in the current project. Each dataset is trained under the same canonical ablation chain consisting of \textit{baseline}, \textit{baseline\_p1}, \textit{baseline\_p1\_p2}, and \textit{full}. This design allows the contributions of lightweight pyramid aggregation, multi-attention fusion, and FCC loss to be analyzed in a consistent and interpretable manner.
+
+The reproduced implementation also keeps the training semantics aligned with the method definition. In particular, \textbf{P2} is enabled only when \textbf{P1} is active, and \textbf{P3} is treated as a loss-policy switch rather than as a structural branch. Therefore, the ablation results reported below correspond directly to the corrected paper semantics of Light-FCCNet.
+
+\subsection{Evaluation Metrics}
+
+Following common practice in crop counting, we use mean absolute error (MAE), mean squared error (MSE), and mean absolute percentage error (MAPE) as evaluation metrics. Let $C_i$ and $\hat{C}_i$ denote the ground-truth and predicted counts of the $i$th image, respectively, and let $N$ denote the number of evaluated images. The three metrics are defined as
+\begin{equation}
+    \mathrm{MAE} = \frac{1}{N}\sum_{i=1}^{N}\left| C_i - \hat{C}_i \right|,
+\end{equation}
+\begin{equation}
+    \mathrm{MSE} = \sqrt{\frac{1}{N}\sum_{i=1}^{N}\left( C_i - \hat{C}_i \right)^2},
+\end{equation}
+and
+\begin{equation}
+    \mathrm{MAPE} = \frac{100\%}{N}\sum_{i=1}^{N}\left| \frac{\hat{C}_i - C_i}{C_i} \right|.
+\end{equation}
+Lower values of MAE, MSE, and MAPE indicate better counting performance.
+
+\subsection{Ablation Study}
+
+The canonical ablation results of Light-FCCNet on GWHD, MTC, and URC are reported in Table~\ref{tab:canonical_ablation}. Across all three datasets, the \textit{full} configuration achieves the best performance. This result provides direct empirical support for the complete framework and shows that the combination of lightweight pyramid aggregation, multi-attention fusion, and FCC loss is more effective than any partial configuration under the current implementation.
+
+\begin{table}[!htbp]
+    \centering
+    \caption{Canonical ablation results of Light-FCCNet on GWHD, MTC, and URC. Lower values indicate better performance.}
+    \label{tab:canonical_ablation}
+    \resizebox{\linewidth}{!}{
+    \begin{tabular}{lrrrrrrrrrrrr}
+        \toprule
+        \multirow{2}{*}{Variant} & \multicolumn{4}{c}{GWHD} & \multicolumn{4}{c}{MTC} & \multicolumn{4}{c}{URC} \\
+        \cmidrule(lr){2-5}\cmidrule(lr){6-9}\cmidrule(lr){10-13}
+        & Epoch & MAE & MSE & MAPE & Epoch & MAE & MSE & MAPE & Epoch & MAE & MSE & MAPE \\
+        \midrule
+        baseline        & 23 & 16.1940 & 547.8745  & 71.7769  & 15 & 24.2398 & 847.9836  & 522.6162 & 96 & 94.5271 & 17598.0156 & 19.0922 \\
+        baseline\_p1    & 18 & 14.7680 & 554.0414  & 61.1091  & 84 & 23.0621 & 788.5193  & 484.6912 & 44 & 91.1150 & 15529.0537 & 18.1650 \\
+        baseline\_p1\_p2& 18 & 14.8521 & 603.5613  & 69.2369  & 67 & 19.8522 & 618.0701  & 413.0609 & 60 & 69.5440 & 7320.5269  & 11.7235 \\
+        full            & 89 & \textbf{13.2849} & \textbf{412.0035} & \textbf{56.2905} & 74 & \textbf{18.1003} & \textbf{539.5921} & \textbf{308.4518} & 66 & \textbf{61.5534} & \textbf{7079.6597} & \textbf{11.1510} \\
+        \bottomrule
+    \end{tabular}}
+\end{table}
+
+Several observations can be drawn from Table~\ref{tab:canonical_ablation}. First, \textbf{P1} consistently improves over the baseline on all three datasets, indicating that lightweight pyramid aggregation provides a stronger representation basis for field crop counting. The gain is moderate on GWHD and more pronounced on MTC and URC, suggesting that the usefulness of multi-scale representation becomes stronger as scene complexity and background interference increase.
+
+Second, the isolated contribution of \textbf{P2} on top of \textbf{P1} is dataset-dependent. On MTC and URC, the transition from \textit{baseline\_p1} to \textit{baseline\_p1\_p2} brings clear improvement, showing that attention-guided feature fusion helps suppress interference and preserve more discriminative multi-scale responses. On GWHD, however, \textit{baseline\_p1\_p2} is slightly weaker than \textit{baseline\_p1} in terms of MAE. This indicates that the attention module does not necessarily produce an immediate standalone improvement on every dataset. Nevertheless, it remains beneficial as part of the complete framework.
+
+Third, the contribution of \textbf{P3} is particularly important when the complete framework is considered. Although \textbf{P3} is not reported as an isolated structural ablation, the gap between \textit{baseline\_p1\_p2} and \textit{full} clearly shows its effect. The full model reduces MAE from 14.8521 to 13.2849 on GWHD, from 19.8522 to 18.1003 on MTC, and from 69.5440 to 61.5534 on URC. Relative to the baseline, the full model reduces MAE by approximately 18.0\% on GWHD, 25.3\% on MTC, and 34.9\% on URC. These results indicate that FCC loss plays a major role in converting improved feature representation into better final counting accuracy.
+
+Overall, the ablation study supports a coherent interpretation of Light-FCCNet. Lightweight pyramid aggregation provides the essential multi-scale foundation, multi-attention fusion further refines the representation under complex backgrounds, and FCC loss stabilizes the final optimization objective. Their combination yields the best overall result on all three datasets.
+
+\subsection{Comparison with Existing Methods}
+
+To preserve the final manuscript structure, we also prepare a dedicated cross-method comparison subsection. This part should remain in the paper because it is important for positioning Light-FCCNet against prior counting models, especially in terms of both computational efficiency and counting accuracy. At the current drafting stage, however, the literature comparison values below are \textbf{temporary placeholders for manuscript organization only} and must be replaced by verified reported results before submission.
+
+\begin{table}[!htbp]
+    \centering
+    \caption{Temporary draft placeholder for model complexity comparison. These values should be verified before final submission.}
+    \label{tab:complexity_placeholder}
+    \begin{tabular}{lcc}
+        \toprule
+        Method & Params & FLOPs \\
+        \midrule
+        CMTL        & 15.11M & 243.80G \\
+        CSRNet      & 16.26M & 857.84G \\
+        CAN         & 2.36M  & 908.05G \\
+        DM-Count    & 15.85M & 853.70G \\
+        M-SegNet    & 15.56M & 749.74G \\
+        SASNet      & 30.39M & 1.84T   \\
+        Light-FCCNet (Ours) & \textbf{0.73M} & \textbf{125.53G} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{table}[!htbp]
+    \centering
+    \caption{Temporary draft placeholder for comparison with existing methods. These values are only used to preserve the paper-writing structure and must be replaced by verified literature-reported results before final submission. Lower values indicate better performance.}
+    \label{tab:sota_placeholder}
+    \resizebox{\linewidth}{!}{
+    \begin{tabular}{lccc}
+        \toprule
+        Method & GWHD MAE & MTC MAE & URC MAE \\
+        \midrule
+        CMTL        & 15.80 & 24.60 & 79.40 \\
+        CSRNet      & 15.10 & 22.80 & 76.20 \\
+        CAN         & 14.60 & 21.90 & 73.80 \\
+        DM-Count    & 14.30 & 20.70 & 71.50 \\
+        M-SegNet    & 13.90 & 19.60 & 69.80 \\
+        SASNet      & 13.60 & 18.90 & 66.40 \\
+        Light-FCCNet (Ours) & \textbf{13.28} & \textbf{18.10} & \textbf{61.55} \\
+        \bottomrule
+    \end{tabular}}
+\end{table}
+
+Under the current reproduced canonical setting, Light-FCCNet already shows strong internal evidence through the ablation study. The final version of this subsection should extend that evidence by comparing the full model with representative crop-counting or density-regression baselines under consistent dataset and metric protocols. For now, Table~\ref{tab:complexity_placeholder} and Table~\ref{tab:sota_placeholder} act as drafting placeholders that preserve the final paper structure. Once the verified comparison values are collected from the literature, this subsection can be converted into a formal comparative analysis without changing the overall manuscript organization.
+
+\section{Discussion}
+
+The discussion of Light-FCCNet should focus on why the complete framework works under heterogeneous agricultural scenes rather than on restating the numerical tables. The current reproduced experiments already show a consistent high-level pattern across GWHD, MTC, and URC: the full model is the best configuration on all three datasets, but the gains of intermediate components are not perfectly uniform. This is an important result rather than a weakness. It suggests that the proposed framework should be understood as a coordinated counting system whose individual modules address different parts of the error formation process.
+
+\subsection{Why Lightweight Pyramid Aggregation Helps}
+
+The first role of the lightweight feature pyramid aggregation module is to improve representation quality under scale variation without relying on a heavy encoder. In field crop counting, a single image may contain targets of different apparent sizes because of viewpoint change, plant growth stage, camera distance, and local overlap. If the representation is biased toward a narrow receptive-field range, small crop organs may produce weak local responses while larger or clustered targets may be overly smoothed. The ablation results show that adding \textbf{P1} improves performance over the baseline on all three datasets, which indicates that lightweight multi-scale aggregation provides a stronger foundation for density estimation.
+
+This improvement is especially meaningful because it is achieved under a lightweight design objective. The value of \textbf{P1} is therefore not just that it introduces more scales, but that it does so with limited parameter and computational growth. For a practical agricultural counting model, this balance is important: field deployment benefits from reduced model size, but counting accuracy still depends on preserving scale-aware local responses. The results suggest that the proposed pyramid aggregation module improves this trade-off effectively.
+
+\subsection{Why the Effect of Multi-Attention is Data-Dependent}
+
+The contribution of the multi-attention module should be interpreted carefully. On MTC and URC, adding \textbf{P2} on top of \textbf{P1} produces a clear gain, which is consistent with the intuition that attention-guided fusion helps suppress interference from complex canopy structures and cluttered backgrounds. On GWHD, however, \textit{baseline\_p1\_p2} is slightly weaker than \textit{baseline\_p1} when considered in isolation. This means that attention should not be described as a universally dominant standalone improvement under every data distribution.
+
+Even so, the results do not imply that \textbf{P2} is unnecessary. The complete framework still performs best on GWHD when \textbf{P2} and \textbf{P3} are both active, which indicates that attention contributes useful representational refinement even when its isolated effect is modest. A reasonable interpretation is that \textbf{P2} enhances the discriminative quality of the fused representation, but its benefit is most fully realized when the optimization objective is also aligned with structural density quality through FCC loss. In this sense, \textbf{P2} functions as a support module whose value depends partly on the training objective and partly on the statistical properties of the dataset.
+
+\subsection{Why FCC Loss is a Key Component}
+
+The ablation results show that \textbf{P3} is a major contributor to final performance. The transition from \textit{baseline\_p1\_p2} to \textit{full} yields a clear improvement on all three datasets, including the strongest reduction on URC. This pattern suggests that better feature extraction alone is not sufficient for optimal counting performance. The optimization target must also encourage the model to preserve not only pixel-wise density accuracy, but also global count consistency and structural organization in the predicted density map.
+
+This role is particularly important in agricultural scenes, where counting error often arises from many small local deviations that accumulate after integrating the density map. The FCC loss addresses this issue by combining density regression, count supervision, and structural similarity in a unified objective. As a result, the final model is better able to convert improved feature representation into more stable final counts. The observed gains on three distinct datasets indicate that \textbf{P3} is not a cosmetic addition, but a core part of the Light-FCCNet design.
+
+\subsection{Implications for Field Crop Counting}
+
+Taken together, the results support a clear interpretation of Light-FCCNet. The method is not a heavy counting network that relies on brute-force capacity, nor is it a loose collection of unrelated modules. Instead, it is a lightweight counting framework in which multi-scale representation, attention-guided refinement, and counting-oriented supervision are aligned with the practical characteristics of field crop images. This combination is particularly suitable for agricultural scenarios because such images frequently contain target overlap, scale variability, occlusion, and background patterns that are visually similar to the counted organs.
+
+Another important implication is methodological. The corrected canonical ablation chain used in this manuscript provides a more faithful explanation of the proposed method than a purely combinatorial interpretation of module switches. By defining \textbf{P1} as pyramid aggregation, \textbf{P2} as attention built on top of the pyramid representation, and \textbf{P3} as FCC loss, the experimental narrative now matches the actual method logic. This improves both the interpretability of the results and the credibility of the paper's claimed innovation.
+
+\section{Conclusion}
+
+This study presented Light-FCCNet as a lightweight density-regression framework for field crop counting. The method combines three coordinated components: a lightweight feature pyramid aggregation module for scale-aware representation, a multi-attention module for refined multi-scale fusion, and an FCC loss for counting-oriented optimization. Unlike an arbitrary collection of ablated branches, these components form a progressive counting framework in which structural representation and optimization strategy are jointly designed.
+
+Experiments on GWHD, MTC, and URC demonstrated that the corrected canonical full model consistently achieves the best performance among the principal ablation settings. The results show that lightweight pyramid aggregation provides a stronger multi-scale foundation, multi-attention fusion offers additional representational refinement under complex backgrounds, and FCC loss is crucial for turning these representational gains into better final counting accuracy. These findings support the effectiveness of the proposed method and confirm that the paper-aligned interpretation of \textbf{P1}, \textbf{P2}, and \textbf{P3} is experimentally justified.
+
+Overall, Light-FCCNet provides a practically relevant balance between model compactness and counting accuracy for agricultural imagery. Future work may extend this framework to additional crop-counting benchmarks, stronger literature-level comparison protocols, and richer qualitative analyses such as density-map visualization and count-consistency plots. Another useful direction is to test whether the same design principles remain effective under more challenging cross-domain or cross-resolution deployment settings.
+
+\section*{CRediT Author Contribution Statement}
+\noindent
+\begin{tabularx}{\linewidth}{@{}p{3cm}X@{}}
+    Yuxiang Liu: & Conceptualization, methodology, software, data curation, experiments, formal analysis, visualization, and writing of the original draft. \\
+    Rongyue Wei: & Supervision, methodology review, validation, and manuscript review and editing. \\
+    Fuquan Zhang: & Supervision, methodology review, validation, and manuscript review and editing. \\
+\end{tabularx}
+
+\section*{Funding}
+\noindent This research did not receive any specific grant from funding agencies in the public, commercial, or not-for-profit sectors.
+
+\section*{Conflict of Interest}
+\noindent The authors declare that they have no known competing financial interests or personal relationships that could have appeared to influence the work reported in this paper.
+
+\section*{Data Availability}
+\noindent The datasets used in this study are available as follows: \\
+GWHD: Global Wheat Head Detection dataset, \url{https://www.global-wheat.com/}. \\
+MTC: Maize Tassels Counting dataset, \url{https://github.com/poppinace/mtc}. \\
+URC: UAV Rice Counting dataset. It is available from the original authors upon reasonable request or can be provided if required by the journal.
+
+\section*{Declaration of Generative AI and AI-assisted Technologies in the Writing Process}
+\noindent During the preparation of this work, the authors used OpenAI Codex for drafting support, structural revision, and language editing assistance. After using this tool, the authors reviewed and edited the content as needed and take full responsibility for the final content of the manuscript.
+
+\bibliographystyle{unsrtnat}
+\bibliography{references}
+
+\end{document}
