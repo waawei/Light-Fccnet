@@ -4,159 +4,83 @@ Date: 2026-04-04
 
 ## Current Goal
 
-推进 `SASNet` 到本地适配规划阶段。
-
-当前已经完成：
-
-- 官方仓库 intake
-- upstream pinning
-- first-pass audit
-- local adaptation notes
-- data adaptation plan
-- result export plan
-
-下一步是：
-
-- 决定是否进入 `SASNet` adapter 实现
-- 若进入，实现 dataset / eval / export / complexity wrappers
+`SASNet` local adapter layer is complete in this worktree. The next decision is whether to stop at adapter parity or continue to a `DM-Count`/`CAN`-style bridge layer.
 
 ## Repository Root
 
 `d:\develop\python\SecondChoice`
 
-## Non-Negotiable Context
+## Worktree Context
 
-- 当前主代码目录是 `pack/`
-- 不要再新增或恢复旧的 `code/` 路径引用
-- Git 远程已可通过 `waawei` 的 SSH 正常推送
-- 正式论文性能指标必须来自 `autodl` 完整训练
-- 本地结果只用于接口验证、复杂度统计、训练桥接和 smoke test
+- Worktree: `d:\develop\python\SecondChoice\.worktrees\sasnet-adapters`
+- Branch: `sasnet-adapters`
+- Main code directory remains `pack/`
+- Do not reintroduce `code/` path usage
 
-## Verified Completed State
+## Completed In This Worktree
 
-### Light-FCCNet / CSRNet
+- Added plan:
+  - `docs/superpowers/plans/2026-04-04-sasnet-adapter-implementation.md`
+- Added adapter files:
+  - `external/baselines/sasnet/local_adapters/__init__.py`
+  - `external/baselines/sasnet/local_adapters/density_targets.py`
+  - `external/baselines/sasnet/local_adapters/datasets.py`
+  - `external/baselines/sasnet/local_adapters/eval.py`
+  - `external/baselines/sasnet/local_adapters/export_results.py`
+  - `external/baselines/sasnet/local_adapters/measure_complexity.py`
+- Added tests:
+  - `tests/test_sasnet_adapters.py`
 
-以下测试已在本机 `Python 3.11 + torch 2.6.0+cu124` 环境中真实通过：
+## Fresh Verification Evidence
 
-- `tests.test_light_fccnet`
-- `tests.test_csrnet_baseline`
-- `tests.test_baseline_complexity`
+Executed in this worktree:
 
-已测复杂度：
+```powershell
+python -m unittest tests.test_sasnet_adapters -v
+python -m unittest tests.test_sasnet_adapters tests.test_dm_count_adapters tests.test_baseline_complexity -v
+python -c "from external.baselines.sasnet.local_adapters.measure_complexity import measure_sasnet_complexity; print(measure_sasnet_complexity((1,3,1080,1920)))"
+```
 
-- `Light-FCCNet`: `915,860` params, `2495.49G` approx FLOPs
-- `CSRNet`: `16,263,489` params, `1713.44G` approx FLOPs
+Results:
 
-### DM-Count
+- `tests.test_sasnet_adapters`: 13 tests passed
+- Combined regression suite: 35 tests passed
+- Complexity result:
+  - `SASNet`: `38,898,698` params
+  - `3675.74G` approx FLOPs
+  - input shape: `(1, 3, 1080, 1920)`
 
-`DM-Count` 已完成本地可继续复现的桥接层，当前状态如下：
+Warnings observed but not blocking:
 
-- upstream URL: `https://github.com/cvlab-stonybrook/DM-Count`
-- upstream branch: `master`
-- pinned commit: `cc5f2132e0d1328909f31b6d665b8e0b15c30467`
-- vendored snapshot path: `external/baselines/dm_count/upstream/`
-- upstream `.git` 已移除
+- `torchvision` warns that upstream still uses deprecated `pretrained`
+- upstream `model.py` uses deprecated `upsample_bilinear` and `upsample_nearest`
+- `albumentations` warns about keypoint processor setup on one dataset-builder path
 
-本地已补齐：
-
-- intake / pinning 记录
-- local adaptation notes
-- data adaptation plan
-- result export plan
-- local dataset adapters
-- local eval / export / complexity wrappers
-- local run entry
-- adapter tests
-
-本地已实测复杂度：
-
-- `DM-Count`: `21,499,457` params, `1706.85G` approx FLOPs
-
-注意：
-
-- `DM-Count` 正式 `MAE / MSE / MAPE` 仍需要上 `autodl` 跑完整训练
-- 当前结果类型应标记为 `adapted reproduction`
-
-## Key Files To Read First
-
-新会话继续时，先读这些文件：
-
-1. `docs/superpowers/specs/2026-04-03-light-fccnet-horizontal-baseline-reproduction-checklist.md`
-2. `external/baselines/STATUS.md`
-3. `external/baselines/INTEGRATION_CHECKLIST.md`
-4. `external/baselines/dm_count/LOCAL_README.md`
-5. `external/baselines/dm_count/LOCAL_ADAPTATION_NOTES.md`
-6. `external/baselines/dm_count/DATA_ADAPTATION_PLAN.md`
-7. `external/baselines/dm_count/RESULT_EXPORT_PLAN.md`
-8. `external/baselines/can/LOCAL_README.md`
-9. `external/baselines/can/LOCAL_ADAPTATION_NOTES.md`
-10. `external/baselines/can/DATA_ADAPTATION_PLAN.md`
-11. `external/baselines/can/RESULT_EXPORT_PLAN.md`
-12. `external/baselines/sasnet/LOCAL_README.md`
-13. `external/baselines/sasnet/LOCAL_ADAPTATION_NOTES.md`
-14. `external/baselines/sasnet/DATA_ADAPTATION_PLAN.md`
-15. `external/baselines/sasnet/RESULT_EXPORT_PLAN.md`
-
-## Explicit Non-Goals
-
-当前不要做这些事：
-
-- 不把 `DM-Count` 注册进 `pack.models`
-- 不修改 `pack/train.py` 主训练循环去兼容 `DM-Count`
-- 不把 `DM-Count` 改写成新的 `DM-Count-style baseline`
-- 不把 `DM-Count` 的本地 smoke result 写进论文主表
-- 不跳过 `CAN` 的 intake 直接做本地实现
-
-## CAN Verified Intake State
-
-- upstream URL: `https://github.com/weizheliu/Context-Aware-Crowd-Counting`
-- upstream branch: `master`
-- pinned commit: `d2e4d0425f578e556c1ab6017d326cff20466fad`
-- vendored snapshot path: `external/baselines/can/upstream/`
-- upstream `.git` 已移除
-
-第一轮 audit 结论：
-
-- 结构可读，入口清晰，值得继续
-- 训练入口：`train.py`
-- 测试入口：`test.py`
-- 数据集入口：`dataset.py` + `image.py`
-- 模型定义：`model.py`
-- 主要风险：
-  - `Python 2.7`
-  - `PyTorch 0.4.1`
-  - `xrange`
-  - 旧式 `Variable`
-  - `/` 整除语义依赖
-  - `test.py` 内部硬编码路径
-
-## SASNet Verified Intake State
+## Upstream Pin
 
 - upstream URL: `https://github.com/TencentYoutuResearch/CrowdCounting-SASNet`
 - upstream branch: `main`
 - pinned commit: `3e2b78a6c6ebe761c5be6a9181457daad6df666d`
 - vendored snapshot path: `external/baselines/sasnet/upstream/`
-- upstream `.git` 已移除
 
-第一轮 audit 结论：
+## Non-Negotiable Context
 
-- 结构可读，值得继续
-- 主入口：`main.py`
-- 模型定义：`model.py`
-- 数据准备：`prepare_dataset.py`
-- 数据集入口：`datasets/loading_data.py` + `datasets/crowd_dataset.py`
-- 主要风险：
-  - 官方仓库偏推理而不是完整训练
-  - 依赖 `python 3.6.8`、`pytorch >= 1.5.0`
-  - 默认目录结构和当前项目协议不一致
-  - 需要本地 bridge 才能完成统一训练与结果导出
+- Formal paper metrics `MAE / MSE / MAPE` must come from full runs on `autodl`
+- Local results here are only for adapter validation, export compatibility, and complexity measurement
+- Do not modify `pack/train.py` for SASNet
+- Do not register `SASNet` in `pack.models` during adapter-only work
 
-## Next Step
+## Next Recommended Step
 
-下一步建议优先顺序：
+If continuing SASNet:
 
-1. `external/baselines/sasnet/local_adapters/datasets.py`
-2. `external/baselines/sasnet/local_adapters/eval.py`
-3. `external/baselines/sasnet/local_adapters/export_results.py`
-4. `external/baselines/sasnet/local_adapters/measure_complexity.py`
-5. 之后再决定是否补 bridge 和 `run_local.py`
+1. Add `runner.py`
+2. Add `train_bridge.py`
+3. Add `run_local.py`
+4. Extend `tests/test_sasnet_adapters.py` to cover bridge and CLI
+5. Then run a local train/eval smoke before any `autodl` instructions
+
+If stopping here:
+
+- merge this adapter slice back first
+- keep `SASNet` marked as adapter-complete but bridge-pending
