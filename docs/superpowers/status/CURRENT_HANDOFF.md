@@ -4,7 +4,7 @@ Date: 2026-04-04
 
 ## Current Goal
 
-推进 `CAN` 到本地适配规划阶段。
+推进 `SASNet` 到本地适配规划阶段。
 
 当前已经完成：
 
@@ -17,8 +17,8 @@ Date: 2026-04-04
 
 下一步是：
 
-- 决定是否进入 `CAN` adapter 实现
-- 若进入，实现 dataset / eval / complexity wrappers
+- 决定是否进入 `SASNet` adapter 实现
+- 若进入，实现 dataset / eval / export / complexity wrappers
 
 ## Repository Root
 
@@ -92,6 +92,10 @@ Date: 2026-04-04
 9. `external/baselines/can/LOCAL_ADAPTATION_NOTES.md`
 10. `external/baselines/can/DATA_ADAPTATION_PLAN.md`
 11. `external/baselines/can/RESULT_EXPORT_PLAN.md`
+12. `external/baselines/sasnet/LOCAL_README.md`
+13. `external/baselines/sasnet/LOCAL_ADAPTATION_NOTES.md`
+14. `external/baselines/sasnet/DATA_ADAPTATION_PLAN.md`
+15. `external/baselines/sasnet/RESULT_EXPORT_PLAN.md`
 
 ## Explicit Non-Goals
 
@@ -126,12 +130,33 @@ Date: 2026-04-04
   - `/` 整除语义依赖
   - `test.py` 内部硬编码路径
 
+## SASNet Verified Intake State
+
+- upstream URL: `https://github.com/TencentYoutuResearch/CrowdCounting-SASNet`
+- upstream branch: `main`
+- pinned commit: `3e2b78a6c6ebe761c5be6a9181457daad6df666d`
+- vendored snapshot path: `external/baselines/sasnet/upstream/`
+- upstream `.git` 已移除
+
+第一轮 audit 结论：
+
+- 结构可读，值得继续
+- 主入口：`main.py`
+- 模型定义：`model.py`
+- 数据准备：`prepare_dataset.py`
+- 数据集入口：`datasets/loading_data.py` + `datasets/crowd_dataset.py`
+- 主要风险：
+  - 官方仓库偏推理而不是完整训练
+  - 依赖 `python 3.6.8`、`pytorch >= 1.5.0`
+  - 默认目录结构和当前项目协议不一致
+  - 需要本地 bridge 才能完成统一训练与结果导出
+
 ## Next Step
 
-下一步应直接开始 `CAN` 的 adapter 设计落地，优先顺序：
+下一步建议优先顺序：
 
-1. `external/baselines/can/local_adapters/datasets.py`
-2. `external/baselines/can/local_adapters/eval.py`
-3. `external/baselines/can/local_adapters/export_results.py`
-4. `external/baselines/can/local_adapters/measure_complexity.py`
-5. 最后再决定是否加 `run_local.py`
+1. `external/baselines/sasnet/local_adapters/datasets.py`
+2. `external/baselines/sasnet/local_adapters/eval.py`
+3. `external/baselines/sasnet/local_adapters/export_results.py`
+4. `external/baselines/sasnet/local_adapters/measure_complexity.py`
+5. 之后再决定是否补 bridge 和 `run_local.py`

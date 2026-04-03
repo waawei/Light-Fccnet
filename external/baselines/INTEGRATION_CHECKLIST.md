@@ -73,9 +73,18 @@ Current pinned upstream for intake:
 
 - [ ] Read `ExperimentReference\Scale Selection for Crowd Counting.pdf`
 - [ ] Confirm official repository availability
-- [ ] Delay integration until `CSRNet`, `DM-Count`, and `CAN` are stable
+- [ ] Vendor upstream snapshot into `external/baselines/sasnet/upstream/`
+- [ ] Record pin metadata in `external/baselines/sasnet/LOCAL_README.md`
+- [ ] Capture first-pass audit for entry points, dataset protocol, and dependency risk
+- [ ] Write local adaptation notes and planning docs if audit remains readable
 - [ ] Adapt to local protocol only after primary baselines are complete
 - [ ] Mark final result as `adapted reproduction` or `literature citation`
+
+Current pinned upstream for intake:
+
+- URL: `https://github.com/TencentYoutuResearch/CrowdCounting-SASNet`
+- Branch: `main`
+- Commit: `3e2b78a6c6ebe761c5be6a9181457daad6df666d`
 
 ### CMTL
 
