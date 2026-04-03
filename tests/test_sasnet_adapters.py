@@ -222,5 +222,117 @@ class SASNetComplexityWrapperTests(unittest.TestCase):
         self.assertGreater(report["flops"], 0)
 
 
+class SASNetBridgeTests(unittest.TestCase):
+    def test_train_collate_matches_upstream_tuple_contract(self):
+        from external.baselines.sasnet.local_adapters.runner import sasnet_train_collate
+
+        batch = [
+            (
+                torch.zeros(3, 32, 40, dtype=torch.float32),
+                torch.zeros(1, 32, 40, dtype=torch.float32),
+            ),
+            (
+                torch.ones(3, 32, 40, dtype=torch.float32),
+                torch.ones(1, 32, 40, dtype=torch.float32),
+            ),
+        ]
+
+        images, targets = sasnet_train_collate(batch)
+
+        self.assertEqual(tuple(images.shape), (2, 3, 32, 40))
+        self.assertEqual(tuple(targets.shape), (2, 1, 32, 40))
+
+    def test_evaluate_model_returns_unified_metrics_and_predictions(self):
+        from external.baselines.sasnet.local_adapters.runner import evaluate_sasnet_model
+
+        class FakeModel(torch.nn.Module):
+            def forward(self, x):
+                batch = x.shape[0]
+                return torch.ones(batch, 1, 32, 40, dtype=x.dtype, device=x.device) * 0.001
+
+        val_samples = [
+            (torch.zeros(3, 32, 40, dtype=torch.float32), 1.0, "sample_0"),
+            (torch.zeros(3, 32, 40, dtype=torch.float32), 2.0, "sample_1"),
+        ]
+        dataloader = torch.utils.data.DataLoader(val_samples, batch_size=1, shuffle=False)
+        report = evaluate_sasnet_model(FakeModel(), dataloader, device="cpu", log_para=1.0)
+
+        self.assertIn("metrics", report)
+        self.assertIn("rows", report)
+        self.assertEqual(len(report["rows"]), 2)
+        self.assertEqual(set(report["metrics"].keys()), {"mae", "mse", "mape"})
+
+
+class SASNetTrainBridgeTests(unittest.TestCase):
+    def test_build_sasnet_dataloaders_returns_train_and_val(self):
+        import external.baselines.sasnet.local_adapters.train_bridge as bridge
+        from external.baselines.sasnet.local_adapters.datasets import SASNetDatasetAdapter
+
+        cfg = {"training": {"batch_size": 2, "num_workers": 0}}
+
+        fake_sets = {
+            "train": SASNetDatasetAdapter(_FakeCountingDataset(), split="train", sigma=4),
+            "val": SASNetDatasetAdapter(_FakeCountingDataset(), split="val", sigma=4),
+        }
+
+        with mock.patch.object(bridge, "build_sasnet_datasets", return_value=fake_sets):
+            dataloaders = bridge.build_sasnet_dataloaders(cfg, dataset_name="gwhd")
+
+        self.assertIn("train", dataloaders)
+        self.assertIn("val", dataloaders)
+
+    def test_run_train_batch_returns_expected_loss_terms(self):
+        import external.baselines.sasnet.local_adapters.train_bridge as bridge
+
+        class TinyModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv = torch.nn.Conv2d(3, 1, kernel_size=1)
+
+            def forward(self, x):
+                return torch.relu(self.conv(x))
+
+        model = TinyModel()
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        criterion = torch.nn.MSELoss()
+
+        batch = (
+            torch.randn(2, 3, 32, 32),
+            torch.ones(2, 1, 32, 32),
+        )
+
+        loss_dict = bridge.run_train_batch(
+            model=model,
+            batch=batch,
+            optimizer=optimizer,
+            criterion=criterion,
+            device="cpu",
+            log_para=1.0,
+        )
+
+        self.assertEqual(set(loss_dict.keys()), {"loss", "density_loss", "mae", "mse"})
+
+
+class SASNetRunnerCliTests(unittest.TestCase):
+    def test_parse_args_accepts_config_dataset_and_block_size(self):
+        from external.baselines.sasnet.local_adapters.run_local import build_arg_parser
+
+        parser = build_arg_parser()
+        args = parser.parse_args(
+            [
+                "--config",
+                "pack/config/gwhd/config_gwhd_light_full.yaml",
+                "--dataset-name",
+                "gwhd",
+                "--block-size",
+                "32",
+            ]
+        )
+
+        self.assertEqual(args.dataset_name, "gwhd")
+        self.assertEqual(args.config, "pack/config/gwhd/config_gwhd_light_full.yaml")
+        self.assertEqual(args.block_size, 32)
+
+
 if __name__ == "__main__":
     unittest.main()

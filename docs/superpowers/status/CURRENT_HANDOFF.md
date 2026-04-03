@@ -4,7 +4,7 @@ Date: 2026-04-04
 
 ## Current Goal
 
-`SASNet` local adapter layer is complete in this worktree. The next decision is whether to stop at adapter parity or continue to a `DM-Count`/`CAN`-style bridge layer.
+`SASNet` local adapter layer and local bridge layer are complete in this worktree. The next step is a local train/eval smoke and then `autodl` execution guidance.
 
 ## Repository Root
 
@@ -28,6 +28,10 @@ Date: 2026-04-04
   - `external/baselines/sasnet/local_adapters/eval.py`
   - `external/baselines/sasnet/local_adapters/export_results.py`
   - `external/baselines/sasnet/local_adapters/measure_complexity.py`
+- Added bridge files:
+  - `external/baselines/sasnet/local_adapters/runner.py`
+  - `external/baselines/sasnet/local_adapters/train_bridge.py`
+  - `external/baselines/sasnet/local_adapters/run_local.py`
 - Added tests:
   - `tests/test_sasnet_adapters.py`
 
@@ -43,8 +47,8 @@ python -c "from external.baselines.sasnet.local_adapters.measure_complexity impo
 
 Results:
 
-- `tests.test_sasnet_adapters`: 13 tests passed
-- Combined regression suite: 35 tests passed
+- `tests.test_sasnet_adapters`: 18 tests passed
+- Combined regression suite: 40 tests passed
 - Complexity result:
   - `SASNet`: `38,898,698` params
   - `3675.74G` approx FLOPs
@@ -72,15 +76,6 @@ Warnings observed but not blocking:
 
 ## Next Recommended Step
 
-If continuing SASNet:
-
-1. Add `runner.py`
-2. Add `train_bridge.py`
-3. Add `run_local.py`
-4. Extend `tests/test_sasnet_adapters.py` to cover bridge and CLI
-5. Then run a local train/eval smoke before any `autodl` instructions
-
-If stopping here:
-
-- merge this adapter slice back first
-- keep `SASNet` marked as adapter-complete but bridge-pending
+1. Run one local `run_local.py` smoke with a real config and minimal epoch count
+2. Prepare `autodl` commands for `GWHD / MTC / URC`
+3. Merge this worktree slice back once smoke is clean
