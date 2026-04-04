@@ -77,5 +77,5 @@ Warnings observed but not blocking:
 ## Next Recommended Step
 
 1. Run one local `run_local.py` smoke with a real config and minimal epoch count
-2. Prepare `autodl` commands for `GWHD / MTC / URC`
+2. Follow `external/baselines/sasnet/AUTODL_RUNBOOK.md` for `GWHD / MTC / URC` full runs
 3. Merge this worktree slice back once smoke is clean
